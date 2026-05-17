@@ -12,10 +12,11 @@
 |----|------|------|--------|
 | 0.1 | 创建 PROJECT_BRIEF.md | ✅ | 总控 |
 | 0.2 | 创建 AGENTS.md | ✅ | 总控 |
-| 0.3 | 创建 TASKS.md | 🔄 | 总控 |
-| 0.4 | 创建 DECISIONS.md | ⬜ | 架构 |
-| 0.5 | 创建 RUNBOOK.md | ⬜ | DevOps |
-| 0.6 | 阶段 0 验收 | ⬜ | QA |
+| 0.3 | 创建 TASKS.md | ✅ | 总控 |
+| 0.4 | 创建 DECISIONS.md | ✅ | 架构 |
+| 0.5 | 创建 RUNBOOK.md | ✅ | DevOps |
+| 0.6 | 创建 README.md + .gitignore | ✅ | 总控 |
+| 0.7 | 阶段 0 验收 | ✅ | QA |
 
 ---
 
