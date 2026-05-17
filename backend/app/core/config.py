@@ -31,6 +31,20 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 384
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
 
+    # LLM Provider
+    LLM_PROVIDER: str = "mock"
+
+    SPARK_BASE_URL: str = "https://spark-api-open.xf-yun.com/v1"
+    SPARK_API_KEY: str = ""
+    SPARK_MODEL: str = "lite"
+
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+
+    LLM_TIMEOUT_SECONDS: int = 60
+    LLM_MAX_RETRIES: int = 2
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

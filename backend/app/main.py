@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.api.auth import router as auth_router
 from app.api.courses import router as courses_router
 from app.api.health import router as health_router
+from app.api.qa import router as qa_router
 from app.api.rag import router as rag_router
 from app.api.version import router as version_router
 # Import all models so SQLModel metadata picks them up
@@ -32,3 +33,4 @@ app.include_router(version_router)
 app.include_router(auth_router)
 app.include_router(courses_router)
 app.include_router(rag_router)
+app.include_router(qa_router)
