@@ -27,7 +27,7 @@
 | ID | 任务 | 状态 | 负责人 |
 |----|------|------|--------|
 | 1.1 | 获取 Spark API 凭证（APP_ID/API_KEY/API_SECRET） | ⬜ | DevOps |
-| 1.2 | Docker 环境验证 | ⬜ | DevOps |
+| 1.2 | Docker 环境验证 | ⏸️ | DevOps |
 | 1.3 | LobeChat Docker 部署 + Spark API 配置 | ⬜ | DevOps |
 | 1.4 | FastAPI 项目骨架（main.py, config, 目录结构） | ✅ | 开发 |
 | 1.5 | 用户模型 + JWT 认证 | ⬜ | 开发 |

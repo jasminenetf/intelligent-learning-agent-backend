@@ -1,7 +1,7 @@
 # 运行手册 — 智能学习Agent系统
 
 ## 环境要求
-- Docker 24+ + Docker Compose v2
+- Docker 24+ + Docker Compose v2（当前环境未安装，部署前装好）
 - Python 3.10+（本地开发）
 - 科大讯飞 Spark API 凭证（APP_ID、API_KEY、API_SECRET）
 
@@ -14,11 +14,20 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir backend
+
+# 验证
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/api/version
 ```
 
-### Docker 启动
+### Docker 启动（Docker 安装后）
 ```bash
+# 安装 Docker（Ubuntu/WSL）
+sudo apt update && sudo apt install -y docker.io docker-compose-v2
+sudo usermod -aG docker $USER
+# 重新登录后：
 docker compose up -d --build
+curl http://127.0.0.1:8000/health
 ```
 
 ### Docker 停止
