@@ -35,6 +35,28 @@ curl http://127.0.0.1:8000/health
 docker compose down
 ```
 
+## API 验证 curl
+
+### 注册
+```bash
+curl -X POST http://127.0.0.1:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"student1","email":"s@ex.com","password":"12345678","role":"student"}'
+```
+
+### 登录
+```bash
+curl -X POST http://127.0.0.1:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"student1","password":"12345678"}'
+```
+
+### 获取当前用户
+```bash
+TOKEN="<from login response>"
+curl http://127.0.0.1:8000/api/auth/me -H "Authorization: Bearer $TOKEN"
+```
+
 ## 常用命令
 
 ```bash

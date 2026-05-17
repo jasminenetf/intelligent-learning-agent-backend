@@ -30,7 +30,7 @@
 | 1.2 | Docker 环境验证 | ⏸️ | DevOps |
 | 1.3 | LobeChat Docker 部署 + Spark API 配置 | ⬜ | DevOps |
 | 1.4 | FastAPI 项目骨架（main.py, config, 目录结构） | ✅ | 开发 |
-| 1.5 | 用户模型 + JWT 认证 | ⬜ | 开发 |
+| 1.5 | 用户模型 + JWT 认证 | ✅ | 开发 |
 | 1.6 | 文件上传接口（PDF/Word） | ⬜ | 开发 |
 | 1.7 | 阶段 1 验收 | ⬜ | QA |
 

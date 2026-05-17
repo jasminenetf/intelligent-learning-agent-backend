@@ -65,6 +65,14 @@
 - **原因**：团队规模小，K8s 过度设计
 - **影响**：所有服务编排
 
+## 决策 010：认证模块实现方案
+- **日期**：2026-05-17
+- **决策**：轻量实现 SQLModel + PyJWT + pwdlib[argon2] + FastAPI Depends
+- **原因**：FastAPI Users 成熟但过度设计，MVP 不需要邮箱验证/OAuth；SQLModel 提供 ORM，PyJWT 标准库，pwdlib 封装 argon2
+- **参考**：FastAPI 官方 Security 教程
+- **替代方案**：FastAPI Users（放弃——太重）
+- **影响**：auth.py, security.py, user model
+
 ---
 
 ## 变更记录模板

@@ -5,7 +5,20 @@
 以科大讯飞星火大模型为核心推理引擎。
 
 ## 当前阶段
-阶段 1：FastAPI 后端骨架初始化
+阶段 2：用户认证 + SQLite 数据库
+
+## API 接口
+
+### 认证
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | /api/auth/register | 用户注册（student/teacher/admin） |
+| POST | /api/auth/login | 登录获取 JWT token |
+| GET | /api/auth/me | 当前用户信息 |
+
+### 健康检查
+| GET | /health | 服务状态 |
+| GET | /api/version | 版本信息 |
 
 ## 快速启动
 
