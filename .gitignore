@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.egg
+
+# Virtualenv
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+*.env.local
+
+# Docker
+data/
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# DB
+*.db
+*.sqlite3
+
+# Uploads
+uploads/
