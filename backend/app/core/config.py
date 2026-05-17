@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     SPARK_API_KEY: str = ""
     SPARK_API_SECRET: str = ""
 
+    # ChromaDB
+    CHROMA_PERSIST_DIR: str = "./data/chroma"
+    CHROMA_COLLECTION_NAME: str = "course_chunks"
+
+    # Embedding
+    EMBEDDING_PROVIDER: str = "hash_mock"
+    EMBEDDING_DIM: int = 384
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
