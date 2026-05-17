@@ -17,7 +17,8 @@ venv/
 
 # Environment
 .env
-*.env.local
+.env.*
+!.env.example
 
 # Docker
 data/
@@ -27,13 +28,22 @@ logs/
 .DS_Store
 Thumbs.db
 
-# DB
-*.db
-*.sqlite3
-
-# Uploads
-uploads/
-data/raw/
-data/generated/
+# Database
 data/app.db
 *.db
+*.sqlite
+
+# Uploads
+data/raw/
+data/generated/
+data/chroma/
+uploads/
+
+# Large/private
+*.pdf
+*.zip
+*.tar.gz
+
+# Cache
+.cache/
+node_modules/
