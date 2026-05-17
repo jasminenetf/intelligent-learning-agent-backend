@@ -80,6 +80,13 @@
 - **替代方案**：LangChain splitter（放弃——镜像不可用）、Marker（放弃——本阶段不接入）
 - **影响**：file_storage.py, document_parser.py, chunker.py, courses API
 
+## 决策 012：ChromaDB 向量化与 RAG 检索复用策略
+- **日期**：2026-05-17
+- **决策**：ChromaDB 本地持久化 + hash_mock embedding（可插拔）+ 纯 Python chunker
+- **原因**：hash_mock 保证无网络跑通工程链路；ChromaDB persistence 目录 data/chroma/；sentence-transformers 后续可选升级
+- **替代方案**：Dify/FastGPT（放弃——过重）；sentence-transformers（保留为可选）
+- **影响**：embedding_service.py, vector_store.py, rag_service.py, rag API
+
 ---
 
 ## 变更记录模板
