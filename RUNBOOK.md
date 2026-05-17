@@ -7,32 +7,21 @@
 
 ## 快速启动
 
-### 1. 获取 Spark 凭证
-访问 https://xinghuo.xfyun.cn 注册 → 创建应用 → 获取 APP_ID / API_KEY / API_SECRET
-
-### 2. 配置环境变量
+### 本地开发
 ```bash
-cp .env.example .env
-# 编辑 .env，填入：
-# SPARK_APP_ID=xxx
-# SPARK_API_KEY=xxx
-# SPARK_API_SECRET=xxx
+cd /home/zhang/projects/intelligent-learning-agent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir backend
 ```
 
-### 3. 启动所有服务
+### Docker 启动
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-### 4. 验证
-| 服务 | 地址 | 验证方式 |
-|------|------|----------|
-| LobeChat | http://localhost:3210 | 浏览器打开，用 ACCESS_CODE 登录 |
-| FastAPI | http://localhost:8000/docs | Swagger UI |
-| ChromaDB | http://localhost:8001 | 后端内部调用 |
-| Minio | http://localhost:9001 | 文件存储控制台 |
-
-### 5. 停止
+### Docker 停止
 ```bash
 docker compose down
 ```
