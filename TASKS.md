@@ -36,6 +36,24 @@
 
 ---
 
+## 阶段 3：课程文件上传 + 解析 + chunk 入库
+**目标**：课程管理、文件上传、PDF/DOCX/TXT 解析、chunk 存储
+**Agent**：后端 + 文件处理 + QA | **验收**：上传 → 解析 → chunk 入库
+
+| ID | 任务 | 状态 | 负责人 |
+|----|------|------|--------|
+| 3.0 | 高数 PDF 定位确认（56MB，超限负向用例） | ✅ | QA |
+| 3.1 | courses/course_files/knowledge_chunks 模型 | ✅ | 后端 |
+| 3.2 | course schemas + API 路由 | ✅ | 后端 |
+| 3.3 | file_storage (sanitize, validate, save) | ✅ | 文件处理 |
+| 3.4 | document_parser (PDF/DOCX/TXT) | ✅ | 文件处理 |
+| 3.5 | chunker (纯 Python splitter) | ✅ | 文件处理 |
+| 3.6 | 权限：teacher/admin 写，学生只读 | ✅ | 后端 |
+| 3.7 | sample.txt 正向 + 高数 PDF 超限负向 | ✅ | QA |
+| 3.8 | 阶段 3 验收 | ✅ | QA |
+
+---
+
 ## 阶段 2：知识库 + RAG 问答（第1-2周）
 **目标**：文档切分 → 向量索引 → Agentic RAG 防幻觉问答
 **Agent**：架构 + 开发 | **验收**：上传 PDF → 提问 → 得到带引用答案
