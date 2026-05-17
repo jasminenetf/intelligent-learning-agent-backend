@@ -73,6 +73,13 @@
 - **替代方案**：FastAPI Users（放弃——太重）
 - **影响**：auth.py, security.py, user model
 
+## 决策 011：课程文件上传与文档解析复用策略
+- **日期**：2026-05-17
+- **决策**：FastAPI UploadFile + PyMuPDF (PDF) + python-docx (DOCX) + 原生 (TXT) + 纯 Python chunker
+- **原因**：LangChain text-splitters 镜像不可用，改纯 Python 实现；Marker 太重不适合 MVP
+- **替代方案**：LangChain splitter（放弃——镜像不可用）、Marker（放弃——本阶段不接入）
+- **影响**：file_storage.py, document_parser.py, chunker.py, courses API
+
 ---
 
 ## 变更记录模板

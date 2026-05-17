@@ -33,3 +33,7 @@ Thumbs.db
 
 # Uploads
 uploads/
+data/raw/
+data/generated/
+data/app.db
+*.db
