@@ -19,7 +19,6 @@ class Settings(BaseSettings):
 
     # Spark LLM (placeholder)
     SPARK_APP_ID: str = ""
-    SPARK_API_KEY: str = ""
     SPARK_API_SECRET: str = ""
 
     # ChromaDB
