@@ -2,375 +2,239 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>智能学习Agent</title>
+<title>智能学习Agent — 资源面板</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font:14px/1.6 'Segoe UI','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333}
+body{font:14px/1.5 'Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333}
 .hdr{background:linear-gradient(135deg,#1a56db,#2563eb);color:#fff;padding:10px 20px;display:flex;justify-content:space-between;align-items:center}
-.hdr h1{font-size:18px}.hdr .sub{font-size:11px;opacity:.85}
-.main{display:flex;height:calc(100vh - 56px)}
-.panel{overflow-y:auto;padding:14px}
-.ctrl{width:360px;background:#fff;border-right:1px solid #e0e0e0}
-.view{flex:1;background:#f8f9fb}
-.card{background:#fff;border-radius:8px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.card h3{font-size:13px;color:#1a56db;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #eee}
-label{display:block;font-size:11px;color:#666;margin:5px 0 2px}
+.hdr h1{font-size:18px}.hdr span{font-size:12px;opacity:.85}
+.main{display:flex;height:calc(100vh - 54px)}
+.ctrl{width:340px;overflow-y:auto;padding:14px;background:#fff;border-right:1px solid #e0e0e0}
+.view{flex:1;overflow-y:auto;padding:16px;background:#f8f9fb}
+h3{font-size:13px;color:#1a56db;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:5px}
+.block{background:#fff;border-radius:8px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+label{font-size:11px;color:#666;display:block;margin:4px 0 2px}
 input,select,textarea{width:100%;padding:7px;border:1px solid #d0d5dd;border-radius:4px;font-size:13px;margin-bottom:4px}
-input:focus,select:focus,textarea:focus{outline:none;border-color:#1a56db;box-shadow:0 0 0 2px rgba(26,86,219,.15)}
-button{padding:7px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;font-weight:500;margin:2px}
-.btn-p{background:#1a56db;color:#fff}.btn-p:hover{background:#1e40af}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#1a56db}
+button{padding:7px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;font-weight:500}
+.btn-b{background:#1a56db;color:#fff}.btn-b:hover{background:#1e40af}
 .btn-s{background:#e8f0fe;color:#1a56db}.btn-s:hover{background:#d0e2fd}
-.btn-g{background:#d1fae5;color:#059669}.btn-g:hover{background:#a7f3d0}
-.btn-w{background:#fef3c7;color:#d97706}
-.btn-r{background:#fee2e2;color:#dc2626}
-.btn-row{display:flex;gap:4px;flex-wrap:wrap}
-.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;margin:1px}
-.badge-ok{background:#d1fae5;color:#059669}
-.badge-warn{background:#fef3c7;color:#d97706}
-.badge-err{background:#fee2e2;color:#dc2626}
-.status-bar{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0}
-.wizard{max-width:480px;margin:80px auto;padding:30px;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.1)}
-.wizard h2{text-align:center;color:#1a56db;margin-bottom:20px}
-.progress{display:flex;gap:6px;margin:8px 0}
-.progress .step{flex:1;text-align:center;font-size:10px;padding:8px 4px;border-radius:4px;background:#f0f0f0;color:#999}
-.progress .step.done{background:#d1fae5;color:#059669}
-.progress .step.running{background:#e8f0fe;color:#1a56db;font-weight:600}
-.progress .step.fail{background:#fee2e2;color:#dc2626}
-.step-card{display:flex;gap:10px;padding:8px;border-left:3px solid #1a56db;margin:6px 0;background:#f8f9fb;border-radius:0 6px 6px 0}
-.step-n{font-size:20px;font-weight:700;color:#1a56db;min-width:36px;text-align:center}
-.step-body h4{font-size:13px}.step-body p{font-size:11px;color:#666;margin:1px 0}
-.quiz-card{border:1px solid #e0e0e0;border-radius:6px;padding:8px;margin:6px 0}
-.quiz-card .q{font-weight:600;margin-bottom:3px;font-size:13px}
-.quiz-card .opt{padding:3px 6px;margin:2px 0;border-radius:3px;font-size:12px}
-.quiz-card .opt.correct{background:#d1fae5;font-weight:600}
-.quiz-card .expl{font-size:11px;color:#666;margin-top:3px;padding-top:3px;border-top:1px dashed #eee}
-pre{background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;max-height:300px}
-.msg{font-size:11px;padding:6px;border-radius:4px;margin:4px 0}
-.msg-err{background:#fee2e2;color:#dc2626}.msg-ok{background:#d1fae5;color:#059669}.msg-info{background:#e8f0fe;color:#1a56db}
+.btn-g{background:#d1fae5;color:#059669}
+.btn-lg{width:100%;margin-top:6px}
+.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;margin:2px}
+.b-ok{background:#d1fae5;color:#059669}.b-w{background:#fef3c7;color:#d97706}.b-e{background:#fee2e2;color:#dc2626}
+.msg{padding:6px 10px;border-radius:4px;font-size:12px;margin:4px 0}
+.m-ok{background:#d1fae5;color:#059669}.m-e{background:#fee2e2;color:#dc2626}.m-i{background:#e8f0fe;color:#1a56db}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px}
+.grid2 div{padding:2px 0}
+.grid2 b{color:#555}
+pre{background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;max-height:200px}
+.qcard{border:1px solid #e0e0e0;border-radius:6px;padding:8px;margin:6px 0;font-size:13px}
+.qcard .qq{font-weight:700;margin-bottom:3px}
+.qcard .oo{padding:3px 6px;margin:1px 0;border-radius:3px;font-size:12px}
+.qcard .oo.ans{background:#d1fae5;font-weight:700}
+.qcard .ex{font-size:11px;color:#666;margin-top:4px;padding-top:4px;border-top:1px dashed #eee}
+.scard{display:flex;gap:10px;padding:8px;border-left:3px solid #1a56db;margin:6px 0;background:#f8f9fb;border-radius:0 6px 6px 0}
+.scard .n{font-size:20px;font-weight:700;color:#1a56db;min-width:36px;text-align:center}
+.scard h4{font-size:13px}.scard p{font-size:11px;color:#666;margin:1px 0}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid #ccc;border-top-color:#1a56db;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:4px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.user-info{font-size:11px;display:flex;gap:8px;align-items:center}
-.hidden{display:none!important}
+.bar{display:flex;gap:6px;margin:8px 0}
+.bar .st{flex:1;text-align:center;font-size:10px;padding:6px 2px;border-radius:4px;background:#f0f0f0;color:#999}
+.bar .st.d{background:#d1fae5;color:#059669}
+.bar .st.r{background:#e8f0fe;color:#1a56db;font-weight:600}
+.bar .st.f{background:#fee2e2;color:#dc2626}
 </style>
 </head>
 <body>
-
-<!-- Setup Wizard -->
-<div id="wizardContainer" class="hidden">
-<div class="wizard"><h2>首次配置</h2>
-<p style="text-align:center;color:#666;margin-bottom:16px">请输入 DeepSeek API Key 开始使用</p>
-<label>API Key</label><input id="wizKey" type="password" placeholder="sk-...">
-<label>Base URL</label><input id="wizUrl" value="https://api.deepseek.com">
-<label>Model</label><input id="wizModel" value="deepseek-chat">
-<div class="btn-row" style="margin-top:12px">
-<button class="btn-p" onclick="wizSave()">保存配置</button>
-<button class="btn-s" onclick="wizTest()">测试连接</button>
-<button class="btn-s" onclick="wizSkip()">跳过（Mock模式）</button>
-</div>
-<div id="wizMsg" style="margin-top:8px"></div>
-</div></div>
-
-<!-- Main App -->
-<div id="appContainer" class="hidden">
-<div class="hdr">
-<div><h1>智能学习Agent</h1><span class="sub">高等教育个性化学习资源多智能体系统</span></div>
-<div class="user-info">
-<span id="userDisplay"></span>
-<span id="sysBadge"><span class="badge badge-warn">检查中...</span></span>
-<button class="btn-s" onclick="doLogout()" style="font-size:10px;padding:3px 8px">退出</button>
-</div>
-</div>
+<div class="hdr"><div><h1>智能学习Agent</h1><span>高等教育个性化学习资源多智能体系统</span></div><div id="top"></div></div>
 <div class="main">
-<div class="panel ctrl">
-<div class="card"><h3>系统状态</h3><button class="btn-p" onclick="checkStatus()">检查状态</button><div id="statusResult" class="status-bar" style="margin-top:6px"></div></div>
 
-<div class="card">
-<h3>账号</h3>
-<div id="loginForm">
-<label>用户名</label><input id="loginUser" value="admin_ocr">
-<label>密码</label><input id="loginPass" type="password" value="admintest123">
-<div class="btn-row" style="margin-top:4px"><button class="btn-p" onclick="doLogin()">登录</button><button class="btn-s" onclick="doRegister()">注册</button><button class="btn-w" onclick="doDemoAccount()">演示账号</button></div>
-</div>
-<div id="loginMsg"></div>
+<div class="ctrl">
+<div class="block">
+<h3>连接</h3>
+<label>API Base</label><input id="apiBase" value="http://127.0.0.1:8000">
+<label>Token</label><input id="token" placeholder="登录后自动填入">
+<div class="row" style="margin-top:4px"><button class="btn-b" onclick="login()">登录</button><button class="btn-s" onclick="regDemo()">演示账号</button><button class="btn-s" onclick="check()">检查状态</button></div>
+<div id="msgLogin"></div>
 </div>
 
-<div class="card">
+<div class="block">
 <h3>课程</h3>
-<div class="btn-row"><button class="btn-s" onclick="listCourses()">刷新列表</button><button class="btn-s" onclick="createDefaultCourse()">创建示例课程</button></div>
-<select id="courseSelect" style="margin-top:4px" onchange="onCourseChange()"></select>
+<div class="row"><button class="btn-s" onclick="listCourses()">刷新</button><button class="btn-s" onclick="createCourse()">创建高等数学</button></div>
+<select id="courseSel" onchange="cid=this.value" style="margin-top:4px"></select>
 <label>Course ID</label><input id="courseId" value="2" readonly style="background:#f0f0f0">
 </div>
 
-<div class="card">
+<div class="block">
 <h3>学生画像</h3>
-<textarea id="profileMsg" rows="3">我是计算机专业学生，高等数学导数和极限比较薄弱，希望用图和例题学习，节奏慢一点。</textarea>
-<div class="btn-row" style="margin-top:4px"><button class="btn-p" onclick="extractProfile()">提取画像</button><button class="btn-s" onclick="getProfile()">查看画像</button></div>
-<div id="profileResult"></div>
+<textarea id="profMsg" rows="3">我是计算机专业学生，导数与极限比较薄弱，希望用图和例题学习，节奏慢一点。</textarea>
+<button class="btn-b btn-lg" onclick="extract()">提取画像</button>
+<div id="profResult"></div>
 </div>
 
-<div class="card">
-<h3>RAG 问答</h3>
-<textarea id="qaQuestion" rows="2">导数和函数变化率有什么关系？</textarea>
-<button class="btn-p" style="width:100%;margin-top:4px" onclick="doQa()">提问</button>
-</div>
-
-<div class="card">
+<div class="block">
 <h3>资源生成</h3>
-<label>主题</label><input id="resTopic" value="导数与极限入门">
+<label>主题</label><input id="topic" value="导数与极限入门">
 <label>类型（多选）</label>
-<select id="resType" multiple size="5" style="height:auto">
+<select id="rtype" multiple size="5" style="height:auto">
 <option value="mindmap" selected>思维导图</option>
 <option value="lecture_doc">讲义</option>
 <option value="quiz">测验</option>
-<option value="ppt">课件PPT</option>
+<option value="ppt">PPT课件</option>
 <option value="study_plan">学习路径</option>
 </select>
-<button class="btn-p" style="width:100%;margin-top:4px" onclick="generateResources()">生成资源</button>
+<button class="btn-b btn-lg" onclick="generate()">生成资源</button>
 </div>
 
-<div class="card"><h3>一键演示</h3><button class="btn-p" style="width:100%" onclick="demoAll()">🐼 全流程演示</button><div id="demoProgress" class="progress" style="margin-top:8px"></div></div>
+<div class="block">
+<h3>一键演示</h3>
+<button class="btn-b btn-lg" onclick="demo()">全流程演示</button>
+<div id="demoBar" class="bar"></div>
 </div>
-<div class="panel view" id="output" style="padding:20px">
-<div style="text-align:center;color:#999;padding:60px 20px"><div style="font-size:42px;margin-bottom:10px"></div><p>欢迎使用智能学习Agent</p><p style="font-size:11px;color:#aaa;margin-top:6px">请先检查系统状态，然后登录开始使用</p></div>
-</div></div></div>
+</div>
+
+<div class="view" id="out">
+<div style="text-align:center;color:#aaa;padding:80px 20px">
+<p style="font-size:36px;margin-bottom:12px"></p>
+<p>登录后开始使用</p>
+<p style="font-size:11px;margin-top:6px">聊天功能请使用 LobeChat 对接 /v1</p>
+</div>
+</div></div>
 
 <script>
 mermaid.initialize({startOnLoad:false,theme:'default'});
-const LS={get(k){try{return localStorage.getItem('ila_'+k)}catch{return null}},set(k,v){try{localStorage.setItem('ila_'+k,v)}catch{}},del(k){try{localStorage.removeItem('ila_'+k)}catch{}}};
-const $=id=>document.getElementById(id);
+const el=id=>document.getElementById(id);
+let cid='2';
 function api(path,opts={}){
- const base=(LS.get('apiBase')||'http://127.0.0.1:8000').replace(/\/$/,'');
- const tk=LS.get('token')||'';
- const h={'Content-Type':'application/json',...opts.headers||{}};
- if(tk)h['Authorization']='Bearer '+tk;
+ const base=el('apiBase').value.replace(/\/$/,'');
+ const t=el('token').value.trim();
+ const h={'Content-Type':'application/json'};
+ if(t)h['Authorization']='Bearer '+t;
  return fetch(base+path,{...opts,headers:h}).then(r=>r.json().then(d=>({ok:r.ok,status:r.status,data:d})));
 }
-function badge(t,c){return`<span class="badge badge-${c}">${t}</span>`}
-function msg(t,c){return`<div class="msg msg-${c}">${t}</div>`}
-function show(id,h){$(id).innerHTML=h}
+function b(t,c){return`<span class="badge b-${c}">${t}</span>`}
+function m(t,c){return`<div class="msg m-${c}">${t}</div>`}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
-// ── Setup Wizard ──
-async function checkWizard(){
+async function login(){
  try{
-  const r=await api('/api/settings/status');
-  if(r.ok&&r.data.deepseek_configured){showWizard(false);return}
- }catch(e){}
- // Also check via llm/status
+  const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:'admin_ocr',password:'admintest123'})});
+  if(r.ok){el('token').value=r.data.access_token;el('msgLogin').innerHTML=m('登录成功','ok');check()}
+  else el('msgLogin').innerHTML=m('失败: '+(r.data.detail||''),'e')
+ }catch(e){el('msgLogin').innerHTML=m('错误: '+e.message,'e')}
+}
+async function regDemo(){
  try{
-  const r2=await api('/api/llm/status');
-  if(r2.ok&&!r2.data.is_mock&&r2.data.deepseek_configured){showWizard(false);return}
- }catch(e){}
- showWizard(true);
+  let r=await api('/api/auth/register',{method:'POST',body:JSON.stringify({username:'demo',password:'demo123456',role:'teacher'})});
+  if(r.ok||(r.data.detail&&r.data.detail.includes('already exists'))){
+   r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:'demo',password:'demo123456'})});
+   if(r.ok){el('token').value=r.data.access_token;el('msgLogin').innerHTML=m('演示账号已登录','ok');listCourses()}
+  }
+ }catch(e){el('msgLogin').innerHTML=m('错误: '+e.message,'e')}
 }
-function showWizard(v){
- $('wizardContainer').classList.toggle('hidden',!v);
- $('appContainer').classList.toggle('hidden',v);
-}
-async function wizSave(){
- show('wizMsg','<span class="spin"></span>保存中...');
+async function check(){
  try{
-  const r=await api('/api/settings/llm',{method:'POST',body:JSON.stringify({
-   provider:'deepseek',api_key:$('wizKey').value,base_url:$('wizUrl').value,model:$('wizModel').value
-  })});
-  if(r.ok)show('wizMsg',msg('配置已保存！需重启后端生效。','ok'));
-  else show('wizMsg',msg('保存失败: '+(r.data.detail||'error'),'err'));
- }catch(e){show('wizMsg',msg('网络错误: '+e.message,'err'))}
+  const r=await api('/api/llm/status');const d=r.data;
+  let h=b(d.is_mock?'Mock':'真LLM',d.is_mock?'e':'ok')+' '+b(d.provider,'ok')+' '+b('Embedding:'+(d.embedding_is_mock?'Mock':d.embedding_provider),d.embedding_is_mock?'e':'ok')+' '+b('DS:'+(d.deepseek_configured?'已配':'未配'),d.deepseek_configured?'ok':'e');
+  el('top').innerHTML=h;
+  el('out').innerHTML=`<div class="block"><h3>系统状态</h3><pre>${esc(JSON.stringify(d,null,2))}</pre></div>`
+ }catch(e){
+  try{
+   const r=await api('/api/settings/status');const d=r.data;
+   let h=b(d.is_mock?'Mock':'真LLM',d.is_mock?'e':'ok')+' '+b(d.llm_provider,'ok')+' '+b('Embedding:'+(d.embedding_is_mock?'Mock':d.embedding_provider),d.embedding_is_mock?'e':'ok');
+   el('top').innerHTML=h
+  }catch(e2){el('top').innerHTML=b('未连接','e')}
+ }
 }
-async function wizTest(){
- show('wizMsg','<span class="spin"></span>测试连接...');
- try{
-  // Save first then test
-  await api('/api/settings/llm',{method:'POST',body:JSON.stringify({
-   provider:'deepseek',api_key:$('wizKey').value,base_url:$('wizUrl').value,model:$('wizModel').value
-  })});
-  const r=await api('/api/settings/test-llm',{method:'POST',body:JSON.stringify({message:'请用一句话说明连接成功'})});
-  if(r.ok&&r.data.ok)show('wizMsg',msg('✅ 连接成功！'+r.data.provider+'/'+r.data.model+' ('+r.data.latency_ms+'ms)','ok')+msg('请重启后端后刷新页面。','info'));
-  else show('wizMsg',msg('连接失败: '+(r.data.error||'unknown'),'err'));
- }catch(e){show('wizMsg',msg('网络错误: '+e.message,'err'))}
-}
-function wizSkip(){showWizard(false)}
-
-// ── Auth ──
-async function doLogin(){
- try{
-  const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:$('loginUser').value,password:$('loginPass').value})});
-  if(r.ok){LS.set('token',r.data.access_token);LS.set('user',$('loginUser').value);show('loginMsg',msg('登录成功 ✓','ok'));updateUserInfo()}
-  else show('loginMsg',msg('登录失败: '+(r.data.detail||''),'err'))
- }catch(e){show('loginMsg',msg('网络错误: '+e.message,'err'))}
-}
-async function doRegister(){
- try{
-  const r=await api('/api/auth/register',{method:'POST',body:JSON.stringify({username:$('loginUser').value,password:$('loginPass').value,role:'admin'})});
-  if(r.ok){show('loginMsg',msg('注册成功，请登录','ok'));doLogin()}
-  else if(r.data.detail&&r.data.detail.includes('already exists')){show('loginMsg',msg('用户已存在，尝试登录...','info'));doLogin()}
-  else show('loginMsg',msg('注册失败: '+(r.data.detail||''),'err'))
- }catch(e){show('loginMsg',msg('网络错误: '+e.message,'err'))}
-}
-async function doDemoAccount(){
- $('loginUser').value='demo';$('loginPass').value='demo123456';
- try{
-  const r=await api('/api/auth/register',{method:'POST',body:JSON.stringify({username:'demo',password:'demo123456',role:'teacher'})});
-  if(r.ok||(r.data.detail&&r.data.detail.includes('already exists')))doLogin();
-  else show('loginMsg',msg('注册演示账号失败','err'))
- }catch(e){show('loginMsg',msg('网络错误: '+e.message,'err'))}
-}
-function doLogout(){LS.del('token');LS.del('user');$('userDisplay').textContent='';checkWizard()}
-async function updateUserInfo(){
- const u=LS.get('user')||'?';
- try{
-  const r=await api('/api/auth/me');
-  if(r.ok)$('userDisplay').textContent='👤 '+(r.data.username||u);
-  else $('userDisplay').textContent='👤 '+u;
- }catch(e){$('userDisplay').textContent='👤 '+u}
-}
-
-// ── Courses ──
 async function listCourses(){
  try{
   const r=await api('/api/courses');
   if(r.ok&&Array.isArray(r.data)){
-   const sel=$('courseSelect');sel.innerHTML='';
-   r.data.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.name+' (ID:'+c.id+')';sel.appendChild(o)});
-   if(r.data.length>0&&!$('courseId').value){$('courseId').value=r.data[0].id;sel.value=r.data[0].id}
+   const s=el('courseSel');s.innerHTML='';
+   r.data.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.text=c.name+' (ID:'+c.id+')';s.appendChild(o)});
+   // Keep current cid unless it doesn't exist in list
+   const exists=r.data.some(c=>c.id==cid);
+   if(!exists&&r.data.length){cid=r.data[0].id;el('courseId').value=cid;s.value=cid}
+   else{s.value=cid}
   }
- }catch(e){console.error(e)}
-}
-async function createDefaultCourse(){
- try{
-  const r=await api('/api/courses',{method:'POST',body:JSON.stringify({name:'高等数学',description:'高等数学个性化学习示例课程'})});
-  if(r.ok){listCourses();$('courseId').value=r.data.id;show('output',msg('课程创建成功: ID='+r.data.id,'ok'))}
-  else show('output',msg('创建失败: '+(r.data.detail||'需教师权限'),'err'))
- }catch(e){show('output',msg('网络错误: '+e.message,'err'))}
-}
-function onCourseChange(){const v=$('courseSelect').value;if(v)$('courseId').value=v}
-
-// ── Status ──
-async function checkStatus(){
- try{
-  const r=await api('/api/llm/status');const d=r.data;
-  let h=badge(d.is_mock?'Mock':'真LLM',d.is_mock?'err':'ok')+' '+badge(d.provider,'ok')+' '+badge('Embedding:'+(d.embedding_is_mock?'Mock':d.embedding_provider),d.embedding_is_mock?'err':'ok')+' '+badge('DS:'+(d.deepseek_configured?'已配':'未配'),d.deepseek_configured?'ok':'err');
-  show('statusResult',h);
-  $('sysBadge').innerHTML=badge('🟢 '+d.provider+'/'+d.model,'ok');
-  append('output',`<div class="card"><h3>系统状态</h3><pre>${esc(JSON.stringify(d,null,2))}</pre></div>`)
- }catch(e){
-  // Fallback to public settings/status (no auth needed)
-  try{
-   const r=await api('/api/settings/status');const d=r.data;
-   let h=badge(d.is_mock?'Mock':'真LLM',d.is_mock?'err':'ok')+' '+badge(d.llm_provider,'ok')+' '+badge('Embedding:'+(d.embedding_is_mock?'Mock':d.embedding_provider),d.embedding_is_mock?'err':'ok')+' '+badge('DS:'+(d.deepseek_configured?'已配':'未配'),d.deepseek_configured?'ok':'err');
-   show('statusResult',h);
-   $('sysBadge').innerHTML=badge('🟢 '+d.llm_provider,d.is_mock?'warn':'ok');
-  }catch(e2){show('statusResult',badge('后端未连接','err'));$('sysBadge').innerHTML=badge('未连接','err')}
- }
-}
-
-// ── Profile ──
-async function extractProfile(){
- show('profileResult','<span class="spin"></span>提取中...');
- try{
-  const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:$('profileMsg').value})});
-  if(!r.ok){show('profileResult',msg('失败: '+(r.data.detail||'error'),'err'));return}
-  const d=r.data;let h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px">';
-  [['水平',d.knowledge_level],['风格',d.cognitive_style],['节奏',d.pace_preference],['动机',d.motivation||'N/A'],['元学习',d.meta_learning_level],['置信度',(d.confidence||0).toFixed(2)],['专业',d.major||'N/A'],['目标',d.learning_goal||'N/A']].forEach(([k,v])=>{h+=`<div><b>${k}:</b> ${v}</div>`});
-  h+='</div>';
-  if(d.weak_points&&d.weak_points.length)h+=`<div style="font-size:11px;margin-top:4px"><b>薄弱点:</b> ${d.weak_points.join('、')}</div>`;
-  show('profileResult',h);
-  append('output',`<div class="card"><h3>学生画像</h3>${h}</div>`)
- }catch(e){show('profileResult',msg('错误: '+e.message,'err'))}
-}
-async function getProfile(){
- try{
-  const r=await api('/api/profiles/me');
-  if(!r.ok){show('profileResult',msg('无画像','info'));return}
-  const d=r.data;show('profileResult',`<div style="font-size:12px">用户${d.user_id} | 水平:${d.knowledge_level} | 风格:${d.cognitive_style} | 节奏:${d.pace_preference}</div>`)
  }catch(e){}
 }
-function append(id,h){$(id).innerHTML+=h}
-
-// ── Q&A ──
-async function doQa(){
- show('output','<div class="card"><span class="spin"></span>RAG 检索+生成中...</div>');
+async function createCourse(){
  try{
-  const r=await api(`/api/qa/courses/${$('courseId').value}/ask`,{method:'POST',body:JSON.stringify({question:$('qaQuestion').value,top_k:5})});
-  if(!r.ok){show('output',msg('失败: '+JSON.stringify(r.data),'err'));return}
-  const d=r.data;let cit='';
-  if(d.citations&&d.citations.length){cit='<div style="font-size:11px;color:#666;margin-top:6px"><b>引用:</b><ul>';d.citations.forEach(c=>{cit+=`<li>${c.source||'?'} p${c.page_number||'?'} score=${(c.score||0).toFixed(3)}</li>`});cit+='</ul></div>'}
-  show('output',`<div class="card"><h3>💬 RAG 问答</h3><p style="white-space:pre-wrap">${esc(d.answer||d.content||'')}</p><div style="font-size:10px;color:#999">${d.provider||'?'}/${d.model||'?'}</div>${cit}</div>`)
- }catch(e){show('output',msg('错误: '+e.message,'err'))}
+  const r=await api('/api/courses',{method:'POST',body:JSON.stringify({name:'高等数学',description:'高等数学个性化学习示例课程'})});
+  if(r.ok){el('courseId').value=r.data.id;cid=r.data.id;listCourses();el('out').innerHTML=m('课程创建成功 ID='+r.data.id,'ok')}
+  else el('out').innerHTML=m('创建失败，请用teacher账号','e')
+ }catch(e){el('out').innerHTML=m('错误: '+e.message,'e')}
 }
-
-// ── Resources ──
-async function generateResources(){
- const types=Array.from($('resType').selectedOptions).map(o=>o.value);
- if(!types.length){show('output',msg('请选择资源类型','err'));return}
- show('output','<div class="card"><span class="spin"></span>DeepSeek 生成中...</div>');
+async function extract(){
+ el('profResult').innerHTML='<span class="spin"></span>';
  try{
-  const r=await api(`/api/resources/courses/${$('courseId').value}/generate`,{method:'POST',body:JSON.stringify({topic:$('resTopic').value,resource_types:types,top_k:8})});
-  if(!r.ok){show('output',msg('失败: '+JSON.stringify(r.data),'err'));return}
+  const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:el('profMsg').value})});
+  if(!r.ok){el('profResult').innerHTML=m('失败','e');return}
+  const d=r.data;
+  let h='<div class="grid2">';
+  [['水平',d.knowledge_level],['风格',d.cognitive_style],['节奏',d.pace_preference],['动机',d.motivation||'N/A'],['元学习',d.meta_learning_level],['置信度',(d.confidence||0).toFixed(2)],['专业',d.major||'N/A'],['目标',d.learning_goal||'N/A']].forEach(([k,v])=>{h+=`<div><b>${k}:</b> ${v}</div>`});
+  h+='</div>';
+  if(d.weak_points&&d.weak_points.length)h+=`<div style="font-size:12px;margin-top:4px"><b>薄弱点:</b> ${d.weak_points.join('、')}</div>`;
+  el('profResult').innerHTML=h;
+  el('out').innerHTML=`<div class="block"><h3>学生画像</h3>${h}<pre style="margin-top:8px;max-height:150px">${esc(JSON.stringify(d,null,2))}</pre></div>`
+ }catch(e){el('profResult').innerHTML=m('错误: '+e.message,'e')}
+}
+async function generate(){
+ const types=Array.from(el('rtype').selectedOptions).map(o=>o.value);
+ if(!types.length){el('out').innerHTML=m('请选择资源类型','e');return}
+ el('out').innerHTML=`<div class="block"><span class="spin"></span> DeepSeek 生成中...</div>`;
+ try{
+  const r=await api(`/api/resources/courses/${cid}/generate`,{method:'POST',body:JSON.stringify({topic:el('topic').value,resource_types:types,top_k:8})});
+  if(!r.ok){el('out').innerHTML=m('失败','e');return}
   let h='';
   r.data.resources.forEach(res=>{
-   h+=`<div class="card"><h3>${res.type} — ${esc(res.title||'')}</h3><div class="status-bar">${badge(res.generated_by,res.fallback_used?'warn':'ok')} ${badge('chunks:'+res.context_chunks,'ok')}</div>`;
-   if(res.mermaid){h+=`<pre>${esc(res.mermaid)}</pre>`;const mid='mm_'+Math.random().toString(36).slice(2,8);h+=`<div class="mermaid" id="${mid}">${res.mermaid}</div>`;setTimeout(()=>{try{mermaid.run({nodes:[document.getElementById(mid)]})}catch(e){}},200)}
-   if(res.content)h+=`<div style="white-space:pre-wrap;max-height:300px;overflow-y:auto;background:#f8f9fb;padding:8px;border-radius:4px;font-size:12px">${esc(res.content).substring(0,2000)}${res.content.length>2000?'...':''}</div>`;
-   if(res.items){res.items.forEach((it,i)=>{h+=`<div class="quiz-card"><div class="q">Q${i+1}. ${esc(it.question)}</div>`;it.options.forEach((o,j)=>{h+=`<div class="opt${j===it.answer?' correct':''}">${String.fromCharCode(65+j)}. ${esc(o)}${j===it.answer?' ✓':''}</div>`});h+=`<div class="expl">解析: ${esc(it.explanation||'')}</div></div>`})}
-   if(res.download_url){const dl=(LS.get('apiBase')||'http://127.0.0.1:8000').replace(/\/$/,'')+res.download_url;h+=`<div style="margin:6px 0"><b>${res.slide_count||'?'} 页</b> <a href="${dl}" target="_blank" style="display:inline-block;padding:6px 12px;background:#1a56db;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">下载 PPTX</a></div>`}
-   if(res.study_plan){const sp=res.study_plan;h+=`<p style="font-size:12px;color:#666">${esc(sp.profile_summary||'')}</p>`;(sp.steps||[]).forEach(s=>{h+=`<div class="step-card"><div class="step-n">${s.order||'?'}</div><div class="step-body"><h4>${esc(s.topic||'')}</h4><p>${esc(s.reason||'')} | ${(s.resource_types||[]).join(',')} | ${s.estimated_minutes||'?'}min</p><p>练习: ${esc(s.practice||'')}</p></div></div>`});if(sp.recommended_topics)h+=`<div style="font-size:11px;color:#666"><b>后续:</b> ${sp.recommended_topics.join(' → ')}</div>`}
+   h+=`<div class="block"><h3>${res.type} — ${esc(res.title||'')}</h3><div class="row">${b(res.generated_by,res.fallback_used?'w':'ok')}</div>`;
+   if(res.mermaid){const mid='m'+Math.random().toString(36).slice(2,8);h+=`<pre>${esc(res.mermaid)}</pre><div class="mermaid" id="${mid}">${res.mermaid}</div>`;setTimeout(()=>{try{mermaid.run({nodes:[document.getElementById(mid)]})}catch(e){}},200)}
+   if(res.content)h+=`<div style="white-space:pre-wrap;max-height:300px;overflow-y:auto;background:#f8f9fb;padding:8px;border-radius:4px;font-size:12px">${esc(res.content).substring(0,2000)}</div>`;
+   if(res.items)res.items.forEach((it,i)=>{h+=`<div class="qcard"><div class="qq">Q${i+1}. ${esc(it.question)}</div>`;it.options.forEach((o,j)=>{h+=`<div class="oo${j===it.answer?' ans':''}">${String.fromCharCode(65+j)}. ${esc(o)}${j===it.answer?'  ✓':''}</div>`});h+=`<div class="ex">${esc(it.explanation||'')}</div></div>`});
+   if(res.download_url)h+=`<div style="margin:8px 0"><b>${res.slide_count||'?'} 页</b> <a href="${el('apiBase').value.replace(/\/$/,'')}${res.download_url}" target="_blank" style="display:inline-block;padding:6px 14px;background:#1a56db;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">下载 PPTX</a></div>`;
+   if(res.study_plan){const sp=res.study_plan;h+=`<p style="font-size:12px;color:#666">${esc(sp.profile_summary||'')}</p>`;(sp.steps||[]).forEach(s=>{h+=`<div class="scard"><div class="n">${s.order||'?'}</div><div><h4>${esc(s.topic||'')}</h4><p>${esc(s.reason||'')} | ${(s.resource_types||[]).join(',')} | ${s.estimated_minutes||'?'}min</p><p>${esc(s.practice||'')}</p></div></div>`});if(sp.recommended_topics)h+=`<div style="font-size:11px;color:#666;margin-top:6px"><b>推荐:</b> ${sp.recommended_topics.join(' → ')}</div>`}
    h+='</div>'
   });
-  show('output',h)
- }catch(e){show('output',msg('错误: '+e.message,'err'))}
+  el('out').innerHTML=h
+ }catch(e){el('out').innerHTML=m('错误: '+e.message,'e')}
 }
+async function demo(){
+ const steps=['状态','画像','学习路径','思维导图','测验','PPT'];
+ el('demoBar').innerHTML=steps.map(s=>`<div class="st" id="ds_${s}">${s}</div>`).join('');
+ const mark=(s,v)=>{const e=el('ds_'+s);if(e){e.className='st';if(v==='r'){e.className='st r';e.textContent='⏳ '+s}else if(v==='d'){e.className='st d';e.textContent='✅ '+s}else{e.className='st f';e.textContent='❌ '+s}}};
+ el('out').innerHTML='<div class="block"><span class="spin"></span> 全流程演示...</div>';
+ let h='';
 
-// ── Demo ──
-async function demoAll(){
- const steps=['状态检查','画像提取','RAG问答','学习路径','思维导图','测验','PPT课件'];
- show('demoProgress',steps.map(s=>`<div class="step" id="ds_${s}">${s}</div>`).join(''));
- show('output','<div class="card"><span class="spin"></span>演示中...</div>');
- const mark=(s,cls)=>{const el=$('ds_'+s);if(el){el.classList.add(cls);el.textContent=cls==='running'?'⏳ '+s:cls==='done'?'✅ '+s:'❌ '+s}};
+ mark('状态','r');
+ try{const r=await api('/api/llm/status');h+=`<div class="block"><h3>状态</h3><pre>${esc(JSON.stringify(r.data,null,2))}</pre></div>`;mark('状态','d')}catch(e){mark('状态','f')}
 
- mark('状态检查','running');let h='';
- try{const r=await api('/api/llm/status');h+=`<div class="card"><h3>系统状态</h3><pre>${esc(JSON.stringify(r.data,null,2))}</pre></div>`;mark('状态检查','done')}catch(e){mark('状态检查','fail')}
+ mark('画像','r');
+ try{const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:el('profMsg').value})});if(r.ok){h+=`<div class="block"><h3>画像</h3><pre>${esc(JSON.stringify(r.data,null,2))}</pre></div>`;mark('画像','d')}else mark('画像','f')}catch(e){mark('画像','f')}
 
- mark('画像提取','running');
- try{const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:$('profileMsg').value})});if(r.ok){h+=`<div class="card"><h3>学生画像</h3><div style="font-size:12px">${esc(JSON.stringify(r.data))}</div></div>`;mark('画像提取','done')}else mark('画像提取','fail')}catch(e){mark('画像提取','fail')}
-
- mark('RAG问答','running');
- try{const r=await api(`/api/qa/courses/${$('courseId').value}/ask`,{method:'POST',body:JSON.stringify({question:$('qaQuestion').value,top_k:3})});if(r.ok){h+=`<div class="card"><h3>RAG问答</h3><p>${esc((r.data.answer||'').substring(0,300))}...</p></div>`;mark('RAG问答','done')}else mark('RAG问答','fail')}catch(e){mark('RAG问答','fail')}
-
- const topic=$('resTopic').value;
- for(const [step,type] of [['学习路径','study_plan'],['思维导图','mindmap'],['测验','quiz'],['PPT课件','ppt']]){
-  mark(step,'running');show('output',h+`<div class="card"><span class="spin"></span>${step}生成中...</div>`);
+ const topic=el('topic').value;
+ for(const [s,t] of [['学习路径','study_plan'],['思维导图','mindmap'],['测验','quiz'],['PPT','ppt']]){
+  mark(s,'r');el('out').innerHTML=h+`<div class="block"><span class="spin"></span> ${s}...</div>`;
   try{
-   const r=await api(`/api/resources/courses/${$('courseId').value}/generate`,{method:'POST',body:JSON.stringify({topic,resource_types:[type],top_k:8})});
+   const r=await api(`/api/resources/courses/${cid}/generate`,{method:'POST',body:JSON.stringify({topic,resource_types:[t],top_k:8})});
    if(r.ok&&r.data.resources.length){
-    const res=r.data.resources[0];
-    h+=`<div class="card"><h3>${step}</h3><div class="status-bar">${badge(res.generated_by,'ok')}</div>`;
-    if(res.mermaid)h+=`<pre>${esc(res.mermaid.substring(0,300))}</pre>`;
-    if(res.content)h+=`<div style="font-size:11px">${esc(res.content.substring(0,200))}...</div>`;
-    if(res.items)h+=`<div>题目数: ${res.items.length}</div>`;
-    if(res.download_url){const dl=(LS.get('apiBase')||'http://127.0.0.1:8000').replace(/\/$/,'')+res.download_url;h+=`<a href="${dl}" target="_blank" style="display:inline-block;padding:6px 12px;background:#1a56db;color:#fff;text-decoration:none;border-radius:4px;font-size:12px;margin-top:6px">下载 PPTX</a>`}
-    if(res.study_plan&&res.study_plan.steps)h+=`<div>步骤: ${res.study_plan.steps.length}</div>`;
-    h+='</div>';mark(step,'done')
-   }else mark(step,'fail')
-  }catch(e){mark(step,'fail')}
+    const res=r.data.resources[0];h+=`<div class="block"><h3>${s}</h3><div class="row">${b(res.generated_by,'ok')}</div>`;
+    if(res.mermaid)h+=`<pre>${esc(res.mermaid.substring(0,200))}</pre>`;
+    if(res.items)h+=`<div>题目: ${res.items.length}</div>`;
+    if(res.download_url)h+=`<a href="${el('apiBase').value.replace(/\/$/,'')}${res.download_url}" target="_blank" style="display:inline-block;padding:6px 14px;background:#1a56db;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">下载 PPTX</a>`;
+    mark(s,'d')
+   }else mark(s,'f')
+  }catch(e){mark(s,'f')}
  }
- show('output',h+msg('✅ 全流程演示完成','ok'))
+ el('out').innerHTML=h+m('全流程结束','ok')
 }
 
-// ── Init ──
-(async function init(){
- LS.set('apiBase','http://127.0.0.1:8000');
- // Restore saved preferences
- const savedUser=LS.get('user');if(savedUser)$('loginUser').value=savedUser;
- const savedCourse=LS.get('courseId');if(savedCourse)$('courseId').value=savedCourse;
- // Auto-login if token exists
- if(LS.get('token')){updateUserInfo()}
- // Check wizard
- await checkWizard();
- // Load courses
- if(!$('appContainer').classList.contains('hidden'))listCourses();
-})()
+el('courseId').addEventListener('input',()=>{cid=el('courseId').value});
+listCourses();
 </script>
 </body>
 </html>
