@@ -170,6 +170,7 @@ async function createCourse(){
  }catch(e){el('out').innerHTML=m('错误: '+e.message,'e')}
 }
 async function extract(){
+ if(!el('token').value.trim()){el('out').innerHTML=m('请先登录','e');return}
  el('profResult').innerHTML='<span class="spin"></span>';
  try{
   const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:el('profMsg').value})});
@@ -185,23 +186,32 @@ async function extract(){
 }
 async function generate(){
  const types=Array.from(el('rtype').selectedOptions).map(o=>o.value);
- if(!types.length){el('out').innerHTML=m('请选择资源类型','e');return}
- el('out').innerHTML=`<div class="block"><span class="spin"></span> DeepSeek 生成中...</div>`;
+ if(!types.length){el('out').innerHTML=m('请选择至少一种资源类型','e');return}
+ // Check login
+ if(!el('token').value.trim()){el('out').innerHTML=m('请先点击"登录"或"演示账号"','e');return}
+ el('out').innerHTML='<div class="block" style="text-align:center;padding:40px"><span class="spin"></span> <b>DeepSeek 生成中，请等待 10-30 秒...</b><p style="font-size:11px;color:#999;margin-top:8px">正在调用 DeepSeek API 生成个性化学习资源</p></div>';
  try{
   const r=await api(`/api/resources/courses/${cid}/generate`,{method:'POST',body:JSON.stringify({topic:el('topic').value,resource_types:types,top_k:8})});
-  if(!r.ok){el('out').innerHTML=m('失败','e');return}
+  if(!r.ok){
+   const detail=r.data?.detail||'未知错误';
+   if(r.status===401)el('out').innerHTML=m('登录已过期，请重新登录','e');
+   else el('out').innerHTML=m('生成失败: '+detail,'e');
+   return
+  }
   let h='';
   r.data.resources.forEach(res=>{
    h+=`<div class="block"><h3>${res.type} — ${esc(res.title||'')}</h3><div class="row">${b(res.generated_by,res.fallback_used?'w':'ok')}</div>`;
-   if(res.mermaid){const mid='m'+Math.random().toString(36).slice(2,8);h+=`<pre>${esc(res.mermaid)}</pre><div class="mermaid" id="${mid}">${res.mermaid}</div>`;setTimeout(()=>{try{mermaid.run({nodes:[document.getElementById(mid)]})}catch(e){}},200)}
+   if(res.mermaid){const mid='m'+Math.random().toString(36).slice(2,8);h+=`<pre>${esc(res.mermaid)}</pre><div class="mermaid" id="${mid}">${res.mermaid}</div>`;setTimeout(()=>{try{mermaid.run({nodes:[document.getElementById(mid)]})}catch(e){}},300)}
    if(res.content)h+=`<div style="white-space:pre-wrap;max-height:300px;overflow-y:auto;background:#f8f9fb;padding:8px;border-radius:4px;font-size:12px">${esc(res.content).substring(0,2000)}</div>`;
    if(res.items)res.items.forEach((it,i)=>{h+=`<div class="qcard"><div class="qq">Q${i+1}. ${esc(it.question)}</div>`;it.options.forEach((o,j)=>{h+=`<div class="oo${j===it.answer?' ans':''}">${String.fromCharCode(65+j)}. ${esc(o)}${j===it.answer?'  ✓':''}</div>`});h+=`<div class="ex">${esc(it.explanation||'')}</div></div>`});
    if(res.download_url)h+=`<div style="margin:8px 0"><b>${res.slide_count||'?'} 页</b> <a href="${el('apiBase').value.replace(/\/$/,'')}${res.download_url}" target="_blank" style="display:inline-block;padding:6px 14px;background:#1a56db;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">下载 PPTX</a></div>`;
    if(res.study_plan){const sp=res.study_plan;h+=`<p style="font-size:12px;color:#666">${esc(sp.profile_summary||'')}</p>`;(sp.steps||[]).forEach(s=>{h+=`<div class="scard"><div class="n">${s.order||'?'}</div><div><h4>${esc(s.topic||'')}</h4><p>${esc(s.reason||'')} | ${(s.resource_types||[]).join(',')} | ${s.estimated_minutes||'?'}min</p><p>${esc(s.practice||'')}</p></div></div>`});if(sp.recommended_topics)h+=`<div style="font-size:11px;color:#666;margin-top:6px"><b>推荐:</b> ${sp.recommended_topics.join(' → ')}</div>`}
    h+='</div>'
   });
-  el('out').innerHTML=h
- }catch(e){el('out').innerHTML=m('错误: '+e.message,'e')}
+  el('out').innerHTML=h;
+  // Auto-scroll to results
+  el('out').scrollTop=0
+ }catch(e){el('out').innerHTML=m('网络错误: '+e.message,'e')}
 }
 async function demo(){
  const steps=['状态','画像','学习路径','思维导图','测验','PPT'];
