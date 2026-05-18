@@ -11,6 +11,7 @@ from app.api.courses import router as courses_router
 from app.api.health import router as health_router
 from app.api.ocr import router as ocr_router
 from app.api.openai_compat import router as openai_router
+from app.api.profiles import router as profiles_router
 from app.api.qa import router as qa_router
 from app.api.rag import router as rag_router
 from app.api.resources import router as resources_router
@@ -40,6 +41,7 @@ app.include_router(auth_router)
 app.include_router(courses_router)
 app.include_router(rag_router)
 app.include_router(qa_router)
+app.include_router(profiles_router)
 app.include_router(resources_router)
 app.include_router(agent_router)
 app.include_router(ocr_router)

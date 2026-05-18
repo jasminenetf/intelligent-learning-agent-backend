@@ -1,58 +1,54 @@
 # 智能学习Agent — 高等教育个性化学习资源多智能体系统
 
 ## 项目概述
-面向高校的个性化学习资源生成与辅导系统，基于多智能体架构和 Agentic RAG 技术，
-以科大讯飞星火大模型为核心推理引擎。
+面向高校的个性化学习资源生成与辅导系统，基于 LangGraph 多智能体架构和 Agentic RAG 技术。
 
-## 当前阶段
-阶段 2：用户认证 + SQLite 数据库
+## 当前状态 (2026-05-18)
 
-## API 接口
+### ✅ 已完成
+- 用户注册/登录 (JWT)
+- 课程管理 + 文件上传
+- OCR-W2 (PDF→文本→chunk→ChromaDB)
+- RAG 搜索 (真语义 Embedding)
+- RAG Q&A (DeepSeek 真模型 + 引用)
+- LangGraph 5Agent 多智能体 (supervisor→profile→rag→lecture→verifier)
+- SQLAdmin 管理后台 (/admin)
+- 6维学生画像 (新增)
+- 5类资源生成: mindmap, lecture_doc, quiz, ppt, study_plan
+- OpenAI-compatible API (/v1/models, /v1/chat/completions)
+- LobeChat 兼容接口
+- 真 Embedding: sentence-transformers MiniLM-L12-v2
+- 真 LLM: DeepSeek deepseek-chat
 
-### 认证
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | /api/auth/register | 用户注册（student/teacher/admin） |
-| POST | /api/auth/login | 登录获取 JWT token |
-| GET | /api/auth/me | 当前用户信息 |
+### 🔄 进行中
+- 前端对接
 
-### 健康检查
-| GET | /health | 服务状态 |
-| GET | /api/version | 版本信息 |
+### ❌ 未完成
+- 前端界面
+- 流式输出
+- 自动测试
+- Docker 部署验证
+- 答辩 PPT/视频
 
 ## 快速启动
 
-### 本地开发
 ```bash
-cd /home/zhang/projects/intelligent-learning-agent
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir backend
-```
-
-### Docker
-```bash
-docker compose up -d --build
-curl http://127.0.0.1:8000/health
+cd backend
+source /home/zhang/.venv/bin/activate
+cp .env.example .env
+# 编辑 .env: 填入 DEEPSEEK_API_KEY=sk-xxx
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ## 技术栈
-| 层 | 技术 |
-|----|------|
-| 前端 | LobeChat |
-| 后端 | FastAPI (Python) |
-| Agent 编排 | LangGraph |
-| 推理引擎 | 科大讯飞 Spark LLM |
-| 向量库 | ChromaDB |
-| 数据库 | PostgreSQL / SQLite |
-| 多模态 | Mermaid.js + Presenton |
-| 部署 | Docker Compose |
+FastAPI + SQLModel + ChromaDB + LangGraph + DeepSeek + sentence-transformers + python-pptx
 
-## 项目文档
-- [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — 项目简介与 MVP 范围
-- [AGENTS.md](AGENTS.md) — Agent 角色定义与协作规则
-- [TASKS.md](TASKS.md) — 任务清单
-- [DECISIONS.md](DECISIONS.md) — 技术决策记录
-- [RUNBOOK.md](RUNBOOK.md) — 运行手册
-- [docs/source/](docs/source/) — 原始需求文档
+## 安全提醒
+- `backend/.env` 包含 API Key，已被 `.gitignore` 忽略
+- 不要将 `.env` 提交到 Git
+
+## 文档
+- [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — 项目简介
+- [DECISIONS.md](DECISIONS.md) — 技术决策
+- [OSS_LICENSES.md](OSS_LICENSES.md) — 开源协议
+- [docs/handoff/](docs/handoff/) — 阶段报告

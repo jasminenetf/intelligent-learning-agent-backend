@@ -14,6 +14,7 @@ class ResourceType(str, Enum):
     LECTURE_DOC = "lecture_doc"
     QUIZ = "quiz"
     PPT = "ppt"
+    STUDY_PLAN = "study_plan"
 
 
 # --- MindMap schemas ---
@@ -101,6 +102,8 @@ class ResourceItem(BaseModel):
     filename: Optional[str] = None
     download_url: Optional[str] = None
     slide_count: Optional[int] = None
+    # For study_plan
+    study_plan: Optional[dict] = None
 
 
 class Citation(BaseModel):

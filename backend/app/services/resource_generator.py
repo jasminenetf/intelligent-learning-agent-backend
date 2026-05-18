@@ -592,7 +592,7 @@ def generate_resource_pack(
 
     for rt in resource_types:
         try:
-            item = _generate_single_resource(rt, topic, chunks, student_profile)
+            item = _generate_single_resource(rt, topic, chunks, student_profile, course_id, session, user)
             resources.append(item)
         except Exception as e:
             logger.warning("Failed to generate resource type=%s: %s", rt.value, e)
@@ -620,6 +620,9 @@ def _generate_single_resource(
     topic: str,
     chunks: list[dict],
     student_profile: dict,
+    course_id: int = 0,
+    session = None,
+    user = None,
 ) -> ResourceItem:
     """Generate a single resource item of the given type."""
     if rt == ResourceType.MINDMAP:
@@ -668,6 +671,33 @@ def _generate_single_resource(
             filename=file_info["filename"],
             download_url=file_info["download_url"],
             slide_count=len(slide_deck.get("slides", [])),
+        )
+
+    elif rt == ResourceType.STUDY_PLAN:
+        from app.services.study_plan_service import generate_study_plan, render_study_plan_markdown
+        from app.services.resource_renderer import render_study_plan
+        from app.services.profile_service import get_or_create_profile
+
+        profile = None
+        if user and session:
+            try:
+                profile = get_or_create_profile(int(user.id) if user.id else 0, session)
+            except Exception:
+                pass
+
+        plan = generate_study_plan(
+            course_id=course_id,
+            topic=topic,
+            profile=profile,
+            session=session,
+            top_k=5,
+        )
+        plan_validated = render_study_plan(plan)
+        return ResourceItem(
+            type=ResourceType.STUDY_PLAN,
+            title=plan.get("title", topic),
+            study_plan=plan_validated,
+            content=render_study_plan_markdown(plan),
         )
 
     else:

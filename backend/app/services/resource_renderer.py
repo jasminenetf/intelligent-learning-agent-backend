@@ -20,7 +20,6 @@ from app.schemas.resource import (
 MAX_MERMAID_DEPTH = 4
 MAX_NODE_LABEL_LEN = 40
 
-
 # ── MindMap → Mermaid ──────────────────────────────────────────────────────────
 
 def render_mindmap_to_mermaid(mindmap: MindMapJSON) -> str:
@@ -154,3 +153,16 @@ def render_quiz(quiz: QuizJSON) -> dict[str, Any]:
         "title": quiz.title,
         "items": items,
     }
+
+
+# ── Study Plan rendering ───────────────────────────────────────────────────
+
+def render_study_plan(plan: dict) -> dict[str, Any]:
+    """Render a study plan dict (pass-through with basic validation)."""
+    required = ["title", "steps"]
+    for key in required:
+        if key not in plan:
+            raise ValueError(f"study plan missing required field: {key}")
+    if not plan["steps"] or not isinstance(plan["steps"], list):
+        raise ValueError("study plan steps must be a non-empty list")
+    return plan

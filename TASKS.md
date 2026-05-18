@@ -1,134 +1,37 @@
-# 任务清单 — 高等教育个性化学习资源多智能体系统
+# 任务清单（更新至 2026-05-18）
 
-> 状态标记：⬜ 未开始 | 🔄 进行中 | ✅ 已完成 | ❌ 阻塞
+## ✅ 已完成
+- 项目控制层 (AGENTS/PROJECT_BRIEF/TASKS/DECISIONS/RUNBOOK)
+- FastAPI 骨架 + JWT 认证
+- 课程管理 + 文件上传
+- PDF/DOCX/TXT 文档解析
+- OCR-W2 (OCR→RAG 检索管道)
+- ChromaDB 向量库
+- RAG 搜索 + Q&A
+- LangGraph 5Agent 多智能体
+- SQLAdmin 管理后台
+- 4类资源生成: mindmap/lecture_doc/quiz/ppt
+- OpenAI-compatible API
+- 真 Embedding (sentence-transformers)
+- 真 LLM (DeepSeek)
+- 6维学生画像
+- 第5类资源: study_plan
+- 资源生成去Mock化
+- OSS_LICENSES.md
 
----
+## 🔄 P1 进行中
+- 答辩前材料准备
 
-## 阶段 0：项目控制层（当前）
-**目标**：建立 AGENTS.md、PROJECT_BRIEF.md、TASKS.md、DECISIONS.md、RUNBOOK.md
-**Agent**：总控 | **验收**：5 个文件存在、内容完整、MVP 范围明确
+## ⬜ 后续 P2/P3
+- 前端界面 (自研简单 HTML)
+- 流式输出 (SSE)
+- 自动测试 (pytest)
+- Docker Compose 完整编排
+- Admin 认证
+- generated_file_storage 持久化
+- Tesseract 安装 (扫描PDF OCR)
 
-| ID | 任务 | 状态 | 负责人 |
-|----|------|------|--------|
-| 0.1 | 创建 PROJECT_BRIEF.md | ✅ | 总控 |
-| 0.2 | 创建 AGENTS.md | ✅ | 总控 |
-| 0.3 | 创建 TASKS.md | ✅ | 总控 |
-| 0.4 | 创建 DECISIONS.md | ✅ | 架构 |
-| 0.5 | 创建 RUNBOOK.md | ✅ | DevOps |
-| 0.6 | 创建 README.md + .gitignore | ✅ | 总控 |
-| 0.7 | 阶段 0 验收 | ✅ | QA |
-
----
-
-## 阶段 1：环境搭建 + 基础骨架（第1周）
-**目标**：Docker 环境跑通、LobeChat 上线、FastAPI 骨架、用户认证
-**Agent**：DevOps + 开发 | **验收**：能登录、能上传文件
-
-| ID | 任务 | 状态 | 负责人 |
-|----|------|------|--------|
-| 1.1 | 获取 Spark API 凭证（APP_ID/API_KEY/API_SECRET） | ⬜ | DevOps |
-| 1.2 | Docker 环境验证 | ⏸️ | DevOps |
-| 1.3 | LobeChat Docker 部署 + Spark API 配置 | ⬜ | DevOps |
-| 1.4 | FastAPI 项目骨架（main.py, config, 目录结构） | ✅ | 开发 |
-| 1.5 | 用户模型 + JWT 认证 | ✅ | 开发 |
-| 1.6 | 文件上传接口（PDF/Word） | ⬜ | 开发 |
-| 1.7 | 阶段 1 验收 | ⬜ | QA |
-
----
-
-## 阶段 3：课程文件上传 + 解析 + chunk 入库
-**目标**：课程管理、文件上传、PDF/DOCX/TXT 解析、chunk 存储
-**Agent**：后端 + 文件处理 + QA | **验收**：上传 → 解析 → chunk 入库
-
-| ID | 任务 | 状态 | 负责人 |
-|----|------|------|--------|
-| 3.0 | 高数 PDF 定位确认（56MB，超限负向用例） | ✅ | QA |
-| 3.1 | courses/course_files/knowledge_chunks 模型 | ✅ | 后端 |
-| 3.2 | course schemas + API 路由 | ✅ | 后端 |
-| 3.3 | file_storage (sanitize, validate, save) | ✅ | 文件处理 |
-| 3.4 | document_parser (PDF/DOCX/TXT) | ✅ | 文件处理 |
-| 3.5 | chunker (纯 Python splitter) | ✅ | 文件处理 |
-| 3.6 | 权限：teacher/admin 写，学生只读 | ✅ | 后端 |
-| 3.7 | sample.txt 正向 + 高数 PDF 超限负向 | ✅ | QA |
-| 3.8 | 阶段 3 验收 | ✅ | QA |
-
----
-
-## 阶段 2：知识库 + RAG 问答（第1-2周）
-**目标**：文档切分 → 向量索引 → Agentic RAG 防幻觉问答
-**Agent**：架构 + 开发 | **验收**：上传 PDF → 提问 → 得到带引用答案
-
-| ID | 任务 | 状态 | 负责人 |
-|----|------|------|--------|
-| 2.1 | ChromaDB 部署 + 连接 | ⬜ | DevOps |
-| 2.2 | PDF 解析与切分（pdfminer） | ⬜ | 开发 |
-| 2.3 | 嵌入生成 + 向量索引构建 | ⬜ | 开发 |
-| 2.4 | LangGraph 项目集成 | ⬜ | 架构 |
-| 2.5 | Tutor Agent 节点（意图解析） | ⬜ | 开发 |
-| 2.6 | Informer Agent 节点（知识检索） | ⬜ | 开发 |
-| 2.7 | Verifier Agent 节点（验证+防幻觉） | ⬜ | 开发 |
-| 2.8 | 失败重试机制（评分低→改写查询→重检索） | ⬜ | 开发 |
-| 2.9 | 阶段 2 验收 | ⬜ | QA |
-
----
-
-## 阶段 3：多模态生成（第3周）
-**目标**：思维导图 + PPT + 测验生成
-**Agent**：开发 | **验收**：前端能渲染思维导图和下载 PPT
-
-| ID | 任务 | 状态 | 负责人 |
-|----|------|------|--------|
-| 3.1 | Mermaid.js 思维导图 Prompt 工程 | ⬜ | 开发 |
-| 3.2 | LobeChat Artifacts 渲染集成 | ⬜ | 开发 |
-| 3.3 | Presenton Docker 部署 | ⬜ | DevOps |
-| 3.4 | PPT 生成接口（Markdown→PPTX） | ⬜ | 开发 |
-| 3.5 | Celery 异步任务队列 | ⬜ | DevOps |
-| 3.6 | 测验题生成（JSON 格式） | ⬜ | 开发 |
-| 3.7 | 阶段 3 验收 | ⬜ | QA |
-
----
-
-## 阶段 4：学生画像 + 学习推荐（第3-4周）
-**目标**：6维画像构建 + 个性化内容推送
-**Agent**：架构 + 开发 | **验收**：画像随对话更新，推荐逻辑可运行
-
-| ID | 任务 | 状态 | 负责人 |
-|----|------|------|--------|
-| 4.1 | Insight Agent 设计（隐式特征提取 Prompt） | ⬜ | 架构 |
-| 4.2 | 画像数据模型（6维 JSON） | ⬜ | 开发 |
-| 4.3 | 画像更新逻辑（对话+测验触发） | ⬜ | 开发 |
-| 4.4 | Practice Agent 画像驱动资源生成 | ⬜ | 开发 |
-| 4.5 | 学习路径推荐（简单规则/A*） | ⬜ | 开发 |
-| 4.6 | 阶段 4 验收 | ⬜ | QA |
-
----
-
-## 阶段 5：部署 + 答辩材料（第4周）
-**目标**：云部署、文档、PPT、演示视频
-**Agent**：DevOps + 文档 | **验收**：云服务器可访问、答辩材料齐全
-
-| ID | 任务 | 状态 | 负责人 |
-|----|------|------|--------|
-| 5.1 | Docker Compose 全服务编排 | ⬜ | DevOps |
-| 5.2 | Nginx 反向代理 + HTTPS | ⬜ | DevOps |
-| 5.3 | 云服务器部署 | ⬜ | DevOps |
-| 5.4 | 管理后台（课程、画像、资源查看） | ⬜ | 开发 |
-| 5.5 | 系统架构图 | ⬜ | 文档 |
-| 5.6 | 答辩 PPT | ⬜ | 文档 |
-| 5.7 | 演示视频（5-7分钟） | ⬜ | 文档 |
-| 5.8 | 开源项目引用说明 | ⬜ | 文档 |
-| 5.9 | 最终验收 | ⬜ | QA |
-
----
-
-## 阶段 6：加分项（时间允许）
-| ID | 任务 | 状态 |
-|----|------|------|
-| 6.1 | 智能辅导答疑（视频/图解） | ⬜ |
-| 6.2 | 学习效果评估 + 阶段报告 | ⬜ |
-| 6.3 | 情感计算 + 语音交互（LobeChat TTS/STT） | ⬜ |
-
----
-
-## 当前阻塞
-- Spark API 凭证尚未获取（需访问科大讯飞开放平台注册）
+## 🎯 答辩前必须完成
+- [ ] 前端 Demo 页面
+- [ ] 答辩 PPT
+- [ ] 演示脚本/流程

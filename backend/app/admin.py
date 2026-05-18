@@ -12,7 +12,7 @@ from sqladmin.authentication import AuthenticationBackend
 
 from app.core.config import settings
 from app.core.database import engine
-from app.models import Course, CourseFile, KnowledgeChunk, User
+from app.models import Course, CourseFile, KnowledgeChunk, StudentProfile, User
 
 
 # ── Model Views ──────────────────────────────────────────────────────────────
@@ -105,6 +105,18 @@ class KnowledgeChunkAdmin(ModelView, model=KnowledgeChunk):
     name_plural = "知识块管理"
 
 
+class StudentProfileAdmin(ModelView, model=StudentProfile):
+    column_list = [
+        StudentProfile.id, StudentProfile.user_id,
+        StudentProfile.major, StudentProfile.knowledge_level,
+        StudentProfile.cognitive_style, StudentProfile.pace_preference,
+        StudentProfile.meta_learning_level, StudentProfile.updated_at,
+    ]
+    column_searchable_list = [StudentProfile.major]
+    can_create = True; can_edit = True; can_delete = True
+    name = "学生画像"; name_plural = "学生画像管理"
+
+
 # ── Admin setup ───────────────────────────────────────────────────────────────
 
 _admin: Admin | None = None
@@ -127,4 +139,5 @@ def setup_admin(app) -> Admin | None:
     _admin.add_view(CourseAdmin)
     _admin.add_view(CourseFileAdmin)
     _admin.add_view(KnowledgeChunkAdmin)
+    _admin.add_view(StudentProfileAdmin)
     return _admin
