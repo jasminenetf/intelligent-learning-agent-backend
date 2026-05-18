@@ -211,18 +211,20 @@ def run_tutor_graph(
     question: str,
     top_k: int,
     session: Session,
-    user: User,
+    user: Optional[User] = None,
 ) -> AgentState:
     global _current_session
     _current_session = session
     try:
+        uid = int(user.id) if (user and user.id) else 0
+        role = user.role if user else "student"
         state: AgentState = {
             "course_id": course_id,
             "course_name": course_name,
             "question": question,
             "top_k": min(top_k, MAX_TUTOR_TOP_K),
-            "user_id": int(user.id) if user.id else 0,
-            "user_role": user.role,
+            "user_id": uid,
+            "user_role": role,
         }
         return _tutor_graph.invoke(state)
     finally:
