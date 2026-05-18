@@ -650,5 +650,25 @@ def _generate_single_resource(
             items=quiz_dict.get("items", []),
         )
 
+    elif rt == ResourceType.PPT:
+        from app.services.ppt_service import build_slide_deck, render_pptx
+        from app.services.generated_file_storage import save_generated_file
+
+        slide_deck = build_slide_deck(topic, chunks, student_profile)
+        pptx_bytes = render_pptx(slide_deck)
+        file_info = save_generated_file(
+            content=pptx_bytes,
+            filename=f"{topic}_课件.pptx",
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+        return ResourceItem(
+            type=ResourceType.PPT,
+            title=slide_deck.get("title", topic),
+            resource_id=file_info["resource_id"],
+            filename=file_info["filename"],
+            download_url=file_info["download_url"],
+            slide_count=len(slide_deck.get("slides", [])),
+        )
+
     else:
         raise ValueError(f"unsupported resource type: {rt.value}")
