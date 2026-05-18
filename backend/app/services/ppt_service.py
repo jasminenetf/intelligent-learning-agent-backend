@@ -33,6 +33,83 @@ COLOR_BLACK = RGBColor(0x00, 0x00, 0x00)
 FONT_TITLE = "Microsoft YaHei"
 FONT_BODY = "Microsoft YaHei"
 
+_PPT_PROMPT = """你是一位课件设计专家。请根据课程内容和学生画像，生成PPT课件大纲。
+输出纯JSON（不要markdown标记），格式：
+{{
+  "title": "课件标题",
+  "subtitle": "副标题",
+  "slides": [
+    {{
+      "type": "title 或 content",
+      "title": "本页标题",
+      "bullets": ["要点1", "要点2"],
+      "speaker_notes": "讲师备注"
+    }}
+  ]
+}}
+主题：{topic}
+课程资料：
+{context}
+学生画像：
+{profile}
+要求：生成6-8页。包含封面、学习目标、前置知识、核心概念、例题、常见误区、练习建议、总结。内容基于课程资料。体现学生画像。只输出JSON。"""
+
+
+def _clean_ppt_json(text: str) -> str:
+    """Strip fences and fix common JSON issues."""
+    import re
+    text = text.strip()
+    text = re.sub(r'^```(?:json)?\s*\n?', '', text)
+    text = re.sub(r'\n?```\s*$', '', text)
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end > start:
+        text = text[start:end+1]
+    text = re.sub(r',\s*}', '}', text)
+    text = re.sub(r',\s*]', ']', text)
+    return text
+
+
+def _chunks_to_context(chunks: list[dict], max_len: int = 800) -> str:
+    """Merge chunks into prompt-ready context for PPT generation."""
+    parts = []
+    total = 0
+    for i, c in enumerate(chunks):
+        ct = (c.get("content", "") or "").strip()
+        if not ct:
+            continue
+        src = c.get("source", "unknown")
+        part = f"[{i+1}:{src}] {ct}"
+        if total + len(part) > max_len:
+            remaining = max_len - total
+            parts.append(part[:remaining])
+            break
+        parts.append(part)
+        total += len(part)
+    return "\n\n".join(parts) if parts else "（暂无课程资料）"
+
+
+def _build_profile_text(profile: dict) -> str:
+    """Build profile summary for PPT prompts."""
+    import json
+    parts = []
+    if profile.get("major"):
+        parts.append(f"专业：{profile['major']}")
+    parts.append(f"知识水平：{profile.get('knowledge_level', 'intermediate')}")
+    parts.append(f"认知风格：{profile.get('cognitive_style', 'conceptual')}")
+    parts.append(f"学习节奏：{profile.get('pace_preference', 'moderate')}")
+    wps = profile.get("weak_points")
+    if wps:
+        if isinstance(wps, str):
+            try: wps = json.loads(wps)
+            except: pass
+        if isinstance(wps, list) and wps:
+            parts.append(f"知识薄弱点：{', '.join(wps)}")
+    return "\n".join(parts)
+
+
+
+
 
 # ── SlideDeck JSON generation ─────────────────────────────────────────────────
 
@@ -40,99 +117,48 @@ def build_slide_deck(
     topic: str,
     chunks: list[dict],
     student_profile: dict,
+    llm_provider=None,
 ) -> dict:
     """Build SlideDeck JSON from topic and retrieved chunks.
 
-    In Mock mode, generates deterministic slide content.
-    When real LLM is available, would call LLM with structured prompt.
+    Uses DeepSeek LLM when available for slide content.
+    Layout/template is fixed; slide text is LLM-generated.
     """
-    # Extract content from chunks for slide content
-    summary = _extract_summary(chunks)
-    difficulty = student_profile.get("knowledge_level", "intermediate")
-    difficulty_labels = {
-        "beginner": "基础入门",
-        "intermediate": "中级进阶",
-        "advanced": "高级深入",
-    }
-    diff_label = difficulty_labels.get(difficulty, "中级进阶")
+    # Try LLM for slide content
+    if llm_provider and llm_provider.provider != "mock" and student_profile:
+        try:
+            context = _chunks_to_context(chunks, 800)
+            profile_text = _build_profile_text(student_profile)
+            prompt = _PPT_PROMPT.format(topic=topic, context=context, profile=profile_text)
+            resp = llm_provider.generate(
+                [{"role": "user", "content": prompt}], temperature=0.3
+            )
+            cleaned = _clean_ppt_json(resp.content.strip())
+            import json as _json
+            data = _json.loads(cleaned)
+            slides = data.get("slides", [])
+            if isinstance(slides, list) and len(slides) >= 4:
+                result = {
+                    "title": data.get("title", f"{topic}课件"),
+                    "subtitle": data.get("subtitle", ""),
+                    "slides": [
+                        {
+                            "type": s.get("type", "content"),
+                            "title": s.get("title", ""),
+                            "bullets": s.get("bullets", []),
+                            "speaker_notes": s.get("speaker_notes", ""),
+                        }
+                        for s in slides
+                        if isinstance(s, dict) and s.get("title")
+                    ],
+                    "generated_by": "deepseek",
+                }
+                if result["slides"]:
+                    return result
+        except Exception:
+            pass
 
-    return {
-        "title": f"{topic}入门讲解",
-        "subtitle": f"适合{diff_label}水平学生",
-        "slides": [
-            {
-                "type": "title",
-                "title": f"{topic}入门讲解",
-                "subtitle": f"智能学习 Agent 自动生成 · {diff_label}",
-            },
-            {
-                "type": "content",
-                "title": "学习目标",
-                "bullets": [
-                    f"理解{topic}的核心概念与定义",
-                    f"掌握{topic}的基本方法与应用",
-                    "能够独立完成相关练习题",
-                    "了解常见误区与注意事项",
-                ],
-            },
-            {
-                "type": "content",
-                "title": f"什么是{topic}",
-                "bullets": _extract_bullets(summary, count=4),
-            },
-            {
-                "type": "content",
-                "title": "核心要点",
-                "bullets": _extract_bullets(summary, count=4, offset=4) or [
-                    "请参考课程教材获取详细内容",
-                    "结合课堂讲解深入理解",
-                    "通过练习巩固知识",
-                    "注意概念之间的联系",
-                ],
-            },
-            {
-                "type": "content",
-                "title": "典型例子",
-                "bullets": [
-                    "课本例题是理解概念的最佳入口",
-                    "从简单到复杂逐步推进",
-                    "注意解题步骤的规范性",
-                    "学会举一反三",
-                ],
-            },
-            {
-                "type": "content",
-                "title": "常见误区",
-                "bullets": [
-                    "概念混淆：注意区分相近但不同的概念",
-                    "公式误用：确认适用范围后再套用公式",
-                    "符号错误：注意数学符号的准确书写",
-                    "跳步思维：初学者建议写出完整推导过程",
-                ],
-            },
-            {
-                "type": "content",
-                "title": "练习建议",
-                "bullets": [
-                    "先完成教材课后基础题",
-                    "再尝试综合性题目",
-                    "建立错题本，定期回顾",
-                    "与同学讨论，检验理解深度",
-                ],
-            },
-            {
-                "type": "content",
-                "title": "参考资料与引用来源",
-                "bullets": [
-                    f"智能学习 Agent 知识库（{len(chunks)} 条检索结果）",
-                    "高等数学（第七版）同济大学数学系",
-                    "课程讲义与课堂笔记",
-                ],
-            },
-        ],
-    }
-
-
+    # Fallback to template (Mock)
 def _extract_summary(chunks: list[dict], max_len: int = 800) -> str:
     """Extract a combined summary from retrieved chunks."""
     parts = []

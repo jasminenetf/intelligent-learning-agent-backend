@@ -104,6 +104,12 @@ class ResourceItem(BaseModel):
     slide_count: Optional[int] = None
     # For study_plan
     study_plan: Optional[dict] = None
+    # Metadata
+    generated_by: str = "fallback_template"
+    used_rag: bool = True
+    used_profile: bool = False
+    fallback_used: bool = True
+    context_chunks: int = 0
 
 
 class Citation(BaseModel):

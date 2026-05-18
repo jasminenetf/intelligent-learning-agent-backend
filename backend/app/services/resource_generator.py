@@ -5,6 +5,7 @@ Reuses existing rag_service and llm_provider.
 Mock mode generates deterministic structured resources from chunks.
 """
 
+import json
 import logging
 import re
 from typing import Any, Optional
@@ -438,97 +439,313 @@ def _extract_keywords(text: str, max_words: int = 10) -> list[str]:
     return result
 
 
+# ── Prompt builders for LLM-based generation ──────────────────────────────────
+
+_MINDSET_PROMPT = """你是一位知识可视化专家。请根据课程内容和学生画像，生成概念思维导图。
+输出纯JSON（不要markdown标记），格式：
+{{
+  "title": "主题标题",
+  "nodes": [
+    {{
+      "id": "唯一英文ID",
+      "label": "节点标签(中文≤20字)",
+      "children": [
+        {{"id": "子ID", "label": "子标签", "children": []}}
+      ]
+    }}
+  ]
+}}
+主题：{topic}
+课程资料：
+{context}
+学生画像：
+{profile}
+要求：节点层级≤3，root节点用title代替nodes，每个分支节点至少2个子节点。内容基于课程资料，体现学生画像特点。只输出JSON。"""
+
+_LECTURE_PROMPT = """你是一位大学教师。请根据课程内容和学生画像，编写个性化讲解文档。
+输出纯JSON（不要markdown标记），格式：
+{{
+  "title": "讲解标题",
+  "difficulty": "beginner",
+  "sections": [
+    {{"heading": "小节标题", "content": "小节内容(Markdown格式)"}}
+  ]
+}}
+主题：{topic}
+课程资料：
+{context}
+学生画像：
+{profile}
+要求：至少4个小节，涵盖学习目标、核心概念、例题讲解、常见误区、小结与建议。内容基于课程资料。体现学生画像（节奏、短板、资源偏好）。只输出JSON。"""
+
+_QUIZ_PROMPT = """你是一位命题专家。请根据课程内容和学生画像，生成测验题。
+输出纯JSON（不要markdown标记），格式：
+{{
+  "title": "测验标题",
+  "items": [
+    {{
+      "question": "题目",
+      "options": ["A.选项", "B.选项", "C.选项", "D.选项"],
+      "answer": 0,
+      "explanation": "解析说明",
+      "difficulty": "basic"
+    }}
+  ]
+}}
+主题：{topic}
+课程资料：
+{context}
+学生画像：
+{profile}
+要求：至少5道题，包含基础题(basic)、理解题(intermediate)、应用题(advanced)。answer是0-based索引。选项不带ABCD前缀，系统会自动添加。题目基于课程资料。体现学生短板知识点。只输出JSON。"""
+
+
+def _clean_json(text: str) -> str:
+    """Strip markdown fences and extract first JSON object."""
+    text = text.strip()
+    text = re.sub(r'^```(?:json)?\s*\n?', '', text)
+    text = re.sub(r'\n?```\s*$', '', text)
+    # Find first { and last }
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end > start:
+        text = text[start:end+1]
+    # Fix trailing commas before } or ]
+    text = re.sub(r',\s*}', '}', text)
+    text = re.sub(r',\s*]', ']', text)
+    return text
+
+
+def _try_llm_generate(llm_provider, prompt: str) -> str | None:
+    """Try LLM generation, return content or None on failure."""
+    try:
+        if llm_provider.provider == "mock":
+            return None
+        resp = llm_provider.generate(
+            [{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        return resp.content.strip()
+    except Exception as e:
+        logger.warning("LLM generation failed for prompt: %s", str(e)[:100])
+        return None
+
+
+def _build_profile_text(profile: dict) -> str:
+    """Build human-readable profile summary for prompts."""
+    parts = []
+    if profile.get("major"):
+        parts.append(f"专业：{profile['major']}")
+    parts.append(f"知识水平：{profile.get('knowledge_level', 'intermediate')}")
+    parts.append(f"认知风格：{profile.get('cognitive_style', 'conceptual')}")
+    parts.append(f"学习节奏：{profile.get('pace_preference', 'moderate')}")
+    wps = profile.get("weak_points")
+    if wps:
+        if isinstance(wps, str):
+            try: wps = json.loads(wps)
+            except: pass
+        if isinstance(wps, list) and wps:
+            parts.append(f"知识薄弱点：{', '.join(wps)}")
+    rps = profile.get("resource_preference")
+    if rps:
+        if isinstance(rps, str):
+            try: rps = json.loads(rps)
+            except: pass
+        if isinstance(rps, list) and rps:
+            parts.append(f"资源偏好：{', '.join(rps)}")
+    return "\n".join(parts)
+
+
+def _chunks_to_context(chunks: list[dict], max_len: int = 1500) -> str:
+    """Merge chunks into a prompt-ready context string."""
+    parts = []
+    total = 0
+    for i, c in enumerate(chunks):
+        content = (c.get("content", "") or "").strip()
+        if not content:
+            continue
+        src = c.get("source", "unknown")
+        part = f"[{i+1}:{src}] {content}"
+        if total + len(part) > max_len:
+            remaining = max_len - total
+            parts.append(part[:remaining])
+            break
+        parts.append(part)
+        total += len(part)
+    return "\n\n".join(parts) if parts else "（暂无课程资料）"
+
 # ── MindMap generation ─────────────────────────────────────────────────────────
 
-def _generate_mindmap_json(topic: str, chunks: list[dict]) -> MindMapJSON:
-    """Generate a MindMapJSON from topic and retrieved chunks."""
-    topic_key = _extract_topic_key(topic)
+def _generate_mindmap_json(
+    topic: str, chunks: list[dict], llm_provider, profile: dict | None = None
+) -> MindMapJSON:
+    """Generate a MindMapJSON from topic and retrieved chunks.
 
+    Uses DeepSeek LLM when available, falls back to Mock templates.
+    """
+    # Try LLM
+    context = _chunks_to_context(chunks)
+    profile_text = _build_profile_text(profile or {})
+    prompt = _MINDSET_PROMPT.format(topic=topic, context=context, profile=profile_text)
+    raw = _try_llm_generate(llm_provider, prompt)
+
+    if raw:
+        try:
+            cleaned = _clean_json(raw)
+            data = json.loads(cleaned)
+            # Validate nodes structure
+            nodes = data.get("nodes", [])
+            if nodes and isinstance(nodes, list):
+                node_objs = []
+                for n in nodes:
+                    if isinstance(n, dict) and n.get("label"):
+                        children = n.get("children", [])
+                        child_objs = [
+                            MindMapNode(id=c.get("id", f"c_{i}"), label=c.get("label", "?"))
+                            for i, c in enumerate(children)
+                            if isinstance(c, dict) and c.get("label")
+                        ]
+                        node_objs.append(
+                            MindMapNode(id=n.get("id", f"n_{len(node_objs)}"),
+                                       label=n["label"][:40],
+                                       children=child_objs)
+                        )
+                if node_objs:
+                    return MindMapJSON(title=data.get("title", topic)[:80], nodes=node_objs)
+        except Exception as e:
+            logger.warning("LLM mindmap JSON parse failed: %s", str(e)[:80])
+
+    # Fallback to Mock
+    topic_key = _extract_topic_key(topic)
     if topic_key and topic_key in _MOCK_TOPICS:
         return _MOCK_TOPICS[topic_key]["mindmap"]
 
-    # Generic fallback: build mindmap from chunk keywords
+    # Generic fallback
     summary = _chunks_to_summary(chunks, max_len=500)
     keywords = _extract_keywords(summary, max_words=8)
-
     if not keywords:
         keywords = ["基础概念", "核心原理", "应用方法"]
-
-    nodes = []
-    for i, kw in enumerate(keywords):
-        nodes.append(
-            MindMapNode(
-                id=f"node_{i}",
-                label=kw,
-                children=[
-                    MindMapNode(id=f"node_{i}_1", label="定义与概念"),
-                    MindMapNode(id=f"node_{i}_2", label="关键要点"),
-                ],
-            )
-        )
-
+    nodes = [
+        MindMapNode(id=f"node_{i}", label=kw, children=[
+            MindMapNode(id=f"node_{i}_1", label="定义与概念"),
+            MindMapNode(id=f"node_{i}_2", label="关键要点"),
+        ])
+        for i, kw in enumerate(keywords)
+    ]
     return MindMapJSON(title=topic, nodes=nodes)
 
 
 # ── Lecture generation ─────────────────────────────────────────────────────────
 
-def _generate_lecture_doc_json(topic: str, chunks: list[dict], profile: dict) -> LectureDocJSON:
-    """Generate a LectureDocJSON from topic, chunks, and student profile."""
-    topic_key = _extract_topic_key(topic)
+def _generate_lecture_doc_json(
+    topic: str, chunks: list[dict], llm_provider, profile: dict | None = None
+) -> LectureDocJSON:
+    """Generate a LectureDocJSON from topic, chunks, and student profile.
 
+    Uses DeepSeek LLM when available, falls back to Mock templates.
+    """
+    # Try LLM
+    context = _chunks_to_context(chunks)
+    profile_text = _build_profile_text(profile or {})
+    prompt = _LECTURE_PROMPT.format(topic=topic, context=context, profile=profile_text)
+    raw = _try_llm_generate(llm_provider, prompt)
+
+    if raw:
+        try:
+            cleaned = _clean_json(raw)
+            data = json.loads(cleaned)
+            sections_data = data.get("sections", [])
+            if sections_data and isinstance(sections_data, list):
+                sections = []
+                for s in sections_data:
+                    if isinstance(s, dict) and s.get("heading") and s.get("content"):
+                        sections.append(LectureSection(
+                            heading=s["heading"],
+                            content=s["content"]
+                        ))
+                if sections:
+                    return LectureDocJSON(
+                        title=data.get("title", f"{topic}讲解")[:80],
+                        difficulty=data.get("difficulty", "intermediate"),
+                        sections=sections
+                    )
+        except Exception as e:
+            logger.warning("LLM lecture JSON parse failed: %s", str(e)[:80])
+
+    # Fallback to Mock
+    topic_key = _extract_topic_key(topic)
     if topic_key and topic_key in _MOCK_TOPICS:
         return _MOCK_TOPICS[topic_key]["lecture"]
 
     # Generic fallback
     summary = _chunks_to_summary(chunks, max_len=1000)
-    difficulty = profile.get("knowledge_level", "intermediate")
-
-    sections = []
-    if summary:
-        sections.append(
-            LectureSection(
-                heading=f"{topic} — 概述",
-                content=summary,
-            )
-        )
-    else:
-        sections.append(
-            LectureSection(
-                heading="课程概述",
-                content=f"本课程讨论 {topic} 相关的核心知识点。请参考课程教材获取详细内容。",
-            )
-        )
-
-    sections.append(
-        LectureSection(
-            heading="学习建议",
-            content="建议结合教材和练习题，从基础概念入手，逐步深入理解。",
-        )
-    )
-
+    difficulty = profile.get("knowledge_level", "intermediate") if profile else "intermediate"
+    sections = [LectureSection(heading=f"{topic} — 概述", content=summary)] if summary else [
+        LectureSection(heading="课程概述",
+                      content=f"本课程讨论 {topic} 相关的核心知识点。请参考课程教材获取详细内容。")
+    ]
+    sections.append(LectureSection(
+        heading="学习建议",
+        content="建议结合教材和练习题，从基础概念入手，逐步深入理解。",
+    ))
     return LectureDocJSON(title=f"{topic}讲解", difficulty=difficulty, sections=sections)
 
 
 # ── Quiz generation ────────────────────────────────────────────────────────────
 
-def _generate_quiz_json(topic: str, chunks: list[dict]) -> QuizJSON:
-    """Generate a QuizJSON from topic and chunks."""
-    topic_key = _extract_topic_key(topic)
+def _generate_quiz_json(
+    topic: str, chunks: list[dict], llm_provider, profile: dict | None = None
+) -> QuizJSON:
+    """Generate a QuizJSON from topic and chunks.
 
+    Uses DeepSeek LLM when available, falls back to Mock templates.
+    """
+    # Try LLM
+    context = _chunks_to_context(chunks)
+    profile_text = _build_profile_text(profile or {})
+    prompt = _QUIZ_PROMPT.format(topic=topic, context=context, profile=profile_text)
+    raw = _try_llm_generate(llm_provider, prompt)
+
+    if raw:
+        try:
+            cleaned = _clean_json(raw)
+            data = json.loads(cleaned)
+            items_data = data.get("items", [])
+            if items_data and isinstance(items_data, list):
+                items = []
+                for it in items_data:
+                    if not isinstance(it, dict):
+                        continue
+                    q = it.get("question", "")
+                    opts = it.get("options", [])
+                    ans = it.get("answer", 0)
+                    exp = it.get("explanation", "")
+                    if not q or len(opts) < 2 or not exp:
+                        continue
+                    # Strip A/B/C/D prefix if present
+                    opts_clean = [re.sub(r'^[A-D][.、．:：\s]+', '', o).strip() for o in opts]
+                    # Ensure answer is within range
+                    ans = max(0, min(int(ans), len(opts_clean) - 1))
+                    items.append(QuizItem(
+                        question=q, options=opts_clean, answer=ans, explanation=exp
+                    ))
+                if len(items) >= 3:
+                    return QuizJSON(title=data.get("title", f"{topic}自测")[:80], items=items)
+        except Exception as e:
+            logger.warning("LLM quiz JSON parse failed: %s", str(e)[:80])
+
+    # Fallback to Mock
+    topic_key = _extract_topic_key(topic)
     if topic_key and topic_key in _MOCK_TOPICS:
         return _MOCK_TOPICS[topic_key]["quiz"]
 
     # Generic fallback
-    summary = _chunks_to_summary(chunks, max_len=300)
-    items = [
-        QuizItem(
-            question=f"关于 {topic}，以下哪项描述最准确？",
-            options=["选项 A", "选项 B", "选项 C", "以上都不是"],
-            answer=0,
-            explanation=f"请参考课程资料获取 {topic} 的准确定义。当前为通用示例题目。",
-        )
-    ]
-
+    items = [QuizItem(
+        question=f"关于 {topic}，以下哪项描述最准确？",
+        options=["选项 A", "选项 B", "选项 C", "以上都不是"],
+        answer=0,
+        explanation=f"请参考课程资料获取 {topic} 的准确定义。当前为通用示例题目。",
+    )]
     return QuizJSON(title=f"{topic}自测", items=items)
 
 
@@ -586,13 +803,37 @@ def generate_resource_pack(
         for c in chunks
     ]
 
+    # Get LLM provider + full student profile
+    llm_provider = get_llm_provider()
+    full_profile = {}
+    try:
+        from app.services.profile_service import get_or_create_profile
+        uid = int(user.id) if user.id else 0
+        sp = get_or_create_profile(uid, session)
+        full_profile = {
+            "major": sp.major,
+            "learning_goal": sp.learning_goal,
+            "knowledge_level": sp.knowledge_level,
+            "cognitive_style": sp.cognitive_style,
+            "weak_points": sp.weak_points,
+            "pace_preference": sp.pace_preference,
+            "resource_preference": sp.resource_preference,
+            "motivation": sp.motivation,
+            "meta_learning_level": sp.meta_learning_level,
+        }
+    except Exception:
+        full_profile = student_profile
+
     # Generate resources
     resources: list[ResourceItem] = []
-    llm_provider = get_llm_provider()
+    num_chunks = len(chunks)
 
     for rt in resource_types:
         try:
-            item = _generate_single_resource(rt, topic, chunks, student_profile, course_id, session, user)
+            item = _generate_single_resource(
+                rt, topic, chunks, full_profile, llm_provider,
+                num_chunks, course_id, session, user
+            )
             resources.append(item)
         except Exception as e:
             logger.warning("Failed to generate resource type=%s: %s", rt.value, e)
@@ -601,6 +842,8 @@ def generate_resource_pack(
                     type=rt,
                     title=topic,
                     content=f"生成失败：{str(e)}",
+                    generated_by="error",
+                    fallback_used=True,
                 )
             )
 
@@ -620,50 +863,91 @@ def _generate_single_resource(
     topic: str,
     chunks: list[dict],
     student_profile: dict,
+    llm_provider,
+    num_chunks: int = 0,
     course_id: int = 0,
     session = None,
     user = None,
 ) -> ResourceItem:
     """Generate a single resource item of the given type."""
+    is_mock = llm_provider.provider == "mock"
+    used_llm = False
+
     if rt == ResourceType.MINDMAP:
-        mm_json = _generate_mindmap_json(topic, chunks)
+        mm_json = _generate_mindmap_json(topic, chunks, llm_provider, student_profile)
         mermaid = render_mindmap_to_mermaid(mm_json)
+        # Detect if LLM was used: compare against known mock templates
+        topic_key = _extract_topic_key(topic)
+        used_llm = not is_mock and (
+            topic_key is None
+            or topic_key not in _MOCK_TOPICS
+            or mm_json.model_dump() != _MOCK_TOPICS[topic_key]["mindmap"].model_dump()
+        )
         return ResourceItem(
             type=ResourceType.MINDMAP,
             title=mm_json.title,
             mermaid=mermaid,
             raw_json=mm_json.model_dump(),
+            generated_by="deepseek" if used_llm else "fallback_template",
+            used_rag=(num_chunks > 0),
+            used_profile=True,
+            fallback_used=not used_llm,
+            context_chunks=num_chunks,
         )
 
     elif rt == ResourceType.LECTURE_DOC:
-        lec_json = _generate_lecture_doc_json(topic, chunks, student_profile)
+        lec_json = _generate_lecture_doc_json(topic, chunks, llm_provider, student_profile)
         md_content = render_lecture_to_markdown(lec_json)
+        topic_key = _extract_topic_key(topic)
+        used_llm = not is_mock and (
+            topic_key is None
+            or topic_key not in _MOCK_TOPICS
+            or lec_json.model_dump() != _MOCK_TOPICS[topic_key]["lecture"].model_dump()
+        )
         return ResourceItem(
             type=ResourceType.LECTURE_DOC,
             title=lec_json.title,
             content=md_content,
+            generated_by="deepseek" if used_llm else "fallback_template",
+            used_rag=(num_chunks > 0),
+            used_profile=True,
+            fallback_used=not used_llm,
+            context_chunks=num_chunks,
         )
 
     elif rt == ResourceType.QUIZ:
-        quiz_json = _generate_quiz_json(topic, chunks)
+        quiz_json = _generate_quiz_json(topic, chunks, llm_provider, student_profile)
         quiz_dict = render_quiz(quiz_json)
+        topic_key = _extract_topic_key(topic)
+        used_llm = not is_mock and (
+            topic_key is None
+            or topic_key not in _MOCK_TOPICS
+            or quiz_json.model_dump() != _MOCK_TOPICS[topic_key]["quiz"].model_dump()
+        )
         return ResourceItem(
             type=ResourceType.QUIZ,
             title=quiz_json.title,
             items=quiz_dict.get("items", []),
+            generated_by="deepseek" if used_llm else "fallback_template",
+            used_rag=(num_chunks > 0),
+            used_profile=True,
+            fallback_used=not used_llm,
+            context_chunks=num_chunks,
         )
 
     elif rt == ResourceType.PPT:
         from app.services.ppt_service import build_slide_deck, render_pptx
         from app.services.generated_file_storage import save_generated_file
 
-        slide_deck = build_slide_deck(topic, chunks, student_profile)
+        slide_deck = build_slide_deck(topic, chunks, student_profile, llm_provider)
         pptx_bytes = render_pptx(slide_deck)
         file_info = save_generated_file(
             content=pptx_bytes,
             filename=f"{topic}_课件.pptx",
             content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
+        # Detect if LLM content was used
+        ppt_used_llm = slide_deck.get("generated_by") == "deepseek"
         return ResourceItem(
             type=ResourceType.PPT,
             title=slide_deck.get("title", topic),
@@ -671,6 +955,11 @@ def _generate_single_resource(
             filename=file_info["filename"],
             download_url=file_info["download_url"],
             slide_count=len(slide_deck.get("slides", [])),
+            generated_by="deepseek" if ppt_used_llm else "fallback_template",
+            used_rag=(num_chunks > 0),
+            used_profile=True,
+            fallback_used=not ppt_used_llm,
+            context_chunks=num_chunks,
         )
 
     elif rt == ResourceType.STUDY_PLAN:
@@ -693,11 +982,17 @@ def _generate_single_resource(
             top_k=5,
         )
         plan_validated = render_study_plan(plan)
+        plan_used_llm = plan.get("provider") != "rule"
         return ResourceItem(
             type=ResourceType.STUDY_PLAN,
             title=plan.get("title", topic),
             study_plan=plan_validated,
             content=render_study_plan_markdown(plan),
+            generated_by=plan.get("provider", "deepseek") if plan_used_llm else "fallback_template",
+            used_rag=(num_chunks > 0),
+            used_profile=True,
+            fallback_used=not plan_used_llm,
+            context_chunks=num_chunks,
         )
 
     else:
