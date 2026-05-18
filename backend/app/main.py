@@ -16,6 +16,7 @@ from app.api.profiles import router as profiles_router
 from app.api.qa import router as qa_router
 from app.api.rag import router as rag_router
 from app.api.resources import router as resources_router
+from app.api.settings import router as settings_router
 from app.api.version import router as version_router
 # Import all models so SQLModel metadata picks them up
 import app.models  # noqa: F401
@@ -35,10 +36,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow frontend dev origins
+# CORS — allow local dev origins (tighten for production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,6 +62,7 @@ app.include_router(profiles_router)
 app.include_router(resources_router)
 app.include_router(agent_router)
 app.include_router(ocr_router)
+app.include_router(settings_router)
 
 # Mount admin panel (conditional on ADMIN_ENABLED env var)
 setup_admin(app)

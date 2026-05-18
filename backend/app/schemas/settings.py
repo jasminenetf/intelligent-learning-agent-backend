@@ -1,0 +1,30 @@
+"""Application settings schemas."""
+
+from pydantic import BaseModel, Field
+
+
+class SettingsStatusResponse(BaseModel):
+    llm_provider: str
+    deepseek_configured: bool
+    embedding_provider: str
+    embedding_configured: bool
+
+
+class LLMConfigRequest(BaseModel):
+    provider: str = "deepseek"
+    api_key: str = Field(..., min_length=1)
+    base_url: str = "https://api.deepseek.com"
+    model: str = "deepseek-chat"
+
+
+class LLMTestRequest(BaseModel):
+    message: str = "请用一句话说明你已连接成功"
+
+
+class LLMTestResponse(BaseModel):
+    ok: bool
+    provider: str = ""
+    model: str = ""
+    response: str = ""
+    latency_ms: float = 0
+    error: str = ""

@@ -119,6 +119,12 @@ class DeepSeekProvider(BaseLLMProvider):
 _provider: Optional[BaseLLMProvider] = None
 
 
+def reset_llm_provider():
+    """Reset cached provider so new settings/env take effect without restart."""
+    global _provider
+    _provider = None
+
+
 def get_llm_provider() -> BaseLLMProvider:
     """Get or create the configured LLM provider. Falls back to Mock on missing key."""
     global _provider
