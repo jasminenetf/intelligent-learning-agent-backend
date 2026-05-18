@@ -69,9 +69,10 @@ pre{background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11
 </div>
 
 <div class="block">
-<h3>学生画像</h3>
-<textarea id="profMsg" rows="3">我是计算机专业学生，导数与极限比较薄弱，希望用图和例题学习，节奏慢一点。</textarea>
-<button class="btn-b btn-lg" onclick="extract()">提取画像</button>
+<h3>学习画像（自动分析）</h3>
+<p style="font-size:11px;color:#999;margin-bottom:8px">基于对话和问答自动提取，无需手填</p>
+<button class="btn-b btn-lg" onclick="extract()">分析学习特征</button>
+<button class="btn-s" style="width:100%;margin-top:4px" onclick="getProfile()">查看当前画像</button>
 <div id="profResult"></div>
 </div>
 
@@ -171,18 +172,29 @@ async function createCourse(){
 }
 async function extract(){
  if(!el('token').value.trim()){el('out').innerHTML=m('请先登录','e');return}
- el('profResult').innerHTML='<span class="spin"></span>';
+ el('profResult').innerHTML='<span class="spin"></span> 分析中（基于对话和问答记录）...';
  try{
-  const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:el('profMsg').value})});
-  if(!r.ok){el('profResult').innerHTML=m('失败','e');return}
+  const msg='请分析该学生的学习特征，包括知识薄弱点、学习风格偏好、适合的学习节奏。';
+  const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:msg})});
+  if(!r.ok){el('profResult').innerHTML=m('分析失败','e');return}
   const d=r.data;
   let h='<div class="grid2">';
-  [['水平',d.knowledge_level],['风格',d.cognitive_style],['节奏',d.pace_preference],['动机',d.motivation||'N/A'],['元学习',d.meta_learning_level],['置信度',(d.confidence||0).toFixed(2)],['专业',d.major||'N/A'],['目标',d.learning_goal||'N/A']].forEach(([k,v])=>{h+=`<div><b>${k}:</b> ${v}</div>`});
+  [['知识水平',d.knowledge_level],['认知风格',d.cognitive_style],['学习节奏',d.pace_preference],['动机',d.motivation||'N/A'],['元学习',d.meta_learning_level],['置信度',(d.confidence||0).toFixed(2)],['专业',d.major||'N/A'],['目标',d.learning_goal||'N/A']].forEach(([k,v])=>{h+=`<div><b>${k}:</b> ${v}</div>`});
   h+='</div>';
   if(d.weak_points&&d.weak_points.length)h+=`<div style="font-size:12px;margin-top:4px"><b>薄弱点:</b> ${d.weak_points.join('、')}</div>`;
   el('profResult').innerHTML=h;
-  el('out').innerHTML=`<div class="block"><h3>学生画像</h3>${h}<pre style="margin-top:8px;max-height:150px">${esc(JSON.stringify(d,null,2))}</pre></div>`
+  el('out').innerHTML=`<div class="block"><h3>学习画像分析</h3>${h}<pre style="margin-top:8px;max-height:150px">${esc(JSON.stringify(d,null,2))}</pre></div>`
  }catch(e){el('profResult').innerHTML=m('错误: '+e.message,'e')}
+}
+async function getProfile(){
+ try{
+  const r=await api('/api/profiles/me');
+  if(!r.ok){el('out').innerHTML=m('无画像数据','i');return}
+  const d=r.data;let h=`<div class="block"><h3>学习画像</h3><div class="grid2">`;
+  [['知识水平',d.knowledge_level],['认知风格',d.cognitive_style],['学习节奏',d.pace_preference],['专业',d.major||'N/A'],['目标',d.learning_goal||'N/A'],['动机',d.motivation||'N/A']].forEach(([k,v])=>{h+=`<div><b>${k}:</b> ${v}</div>`});
+  h+='</div></div>';
+  el('out').innerHTML=h
+ }catch(e){el('out').innerHTML=m('获取失败','e')}
 }
 async function generate(){
  const types=Array.from(el('rtype').selectedOptions).map(o=>o.value);
@@ -224,7 +236,7 @@ async function demo(){
  try{const r=await api('/api/llm/status');h+=`<div class="block"><h3>状态</h3><pre>${esc(JSON.stringify(r.data,null,2))}</pre></div>`;mark('状态','d')}catch(e){mark('状态','f')}
 
  mark('画像','r');
- try{const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:el('profMsg').value})});if(r.ok){h+=`<div class="block"><h3>画像</h3><pre>${esc(JSON.stringify(r.data,null,2))}</pre></div>`;mark('画像','d')}else mark('画像','f')}catch(e){mark('画像','f')}
+ try{const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:'分析学习特征'})});if(r.ok){h+=`<div class="block"><h3>画像</h3><pre>${esc(JSON.stringify(r.data,null,2))}</pre></div>`;mark('画像','d')}else mark('画像','f')}catch(e){mark('画像','f')}
 
  const topic=el('topic').value;
  for(const [s,t] of [['学习路径','study_plan'],['思维导图','mindmap'],['测验','quiz'],['PPT','ppt']]){
