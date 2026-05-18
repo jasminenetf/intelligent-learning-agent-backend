@@ -1,13 +1,10 @@
 @echo off
-title 智能学习Agent
-echo ============================================
-echo   智能学习Agent — 正在启动...
-echo ============================================
+title Intelligent Learning Agent Launcher
+echo Starting Intelligent Learning Agent...
 echo.
-echo 请在 WSL 中执行以下命令或双击 WSL 内的脚本:
-echo   cd /home/zhang/projects/intelligent-learning-agent
-echo   bash scripts/start_app.sh
+wsl.exe -e bash -lc "cd /home/zhang/projects/intelligent-learning-agent && bash scripts/start_app.sh"
 echo.
-echo 如需自动启动，请安装 WSL 并配置默认发行版。
-echo ============================================
+echo If the browser did not open, visit:
+echo http://127.0.0.1:5173
+echo.
 pause
