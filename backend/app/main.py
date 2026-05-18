@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.admin import setup_admin
 from app.api.agent import router as agent_router
@@ -32,6 +33,15 @@ app = FastAPI(
     description="高等教育个性化学习资源多智能体系统",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+# CORS — allow frontend dev origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(health_router)
