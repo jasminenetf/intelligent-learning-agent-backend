@@ -38,16 +38,28 @@ echo "       Frontend PID: $FRONTEND_PID"
 
 sleep 2
 
+# Auto-open browser
 echo ""
 echo "============================================"
 echo "  系统已启动！"
 echo "  前端: http://127.0.0.1:5173"
 echo "  后端: http://127.0.0.1:8000"
-echo "  API文档: http://127.0.0.1:8000/docs"
-echo ""
 echo "  停止: bash scripts/stop_app.sh"
-echo "        或 Ctrl+C 两次"
 echo "============================================"
+
+# Try to open browser (WSL → Windows)
+if command -v powershell.exe &>/dev/null; then
+    powershell.exe -Command "Start-Process 'http://127.0.0.1:5173'" 2>/dev/null && echo "  浏览器已自动打开" || true
+elif command -v xdg-open &>/dev/null; then
+    xdg-open http://127.0.0.1:5173 2>/dev/null && echo "  浏览器已自动打开" || true
+elif command -v open &>/dev/null; then
+    open http://127.0.0.1:5173 2>/dev/null && echo "  浏览器已自动打开" || true
+fi
+
+echo "  如浏览器未弹出，请手动访问: http://127.0.0.1:5173"
+echo ""
+echo "  (按 Ctrl+C 停止所有服务)"
+echo ""
 
 # Wait for either process
 wait

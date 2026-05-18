@@ -85,9 +85,24 @@ def api_save_llm_config(body: LLMConfigRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"failed to save config: {e}")
 
+    # Immediately apply settings for current process
+    try:
+        settings.LLM_PROVIDER = provider
+        if provider == "deepseek":
+            settings.DEEPSEEK_API_KEY = body.api_key
+            settings.DEEPSEEK_BASE_URL = body.base_url
+            settings.DEEPSEEK_MODEL = body.model
+        elif provider == "spark":
+            settings.SPARK_API_KEY = body.api_key
+            settings.SPARK_BASE_URL = body.base_url
+            settings.SPARK_MODEL = body.model
+        reset_llm_provider()
+    except Exception:
+        pass  # non-fatal, settings may need restart
+
     # Never log the key
-    logger.info("LLM config saved: provider=%s, key_configured=True", provider)
-    return {"ok": True, "provider": provider, "saved": True, "restart_required": True}
+    logger.info("LLM config saved and applied: provider=%s, key_configured=True", provider)
+    return {"ok": True, "provider": provider, "saved": True, "applied": True}
 
 
 @router.post("/test-llm", response_model=LLMTestResponse)

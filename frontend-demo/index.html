@@ -211,7 +211,7 @@ async function doRegister(){
 async function doDemoAccount(){
  $('loginUser').value='demo';$('loginPass').value='demo123456';
  try{
-  const r=await api('/api/auth/register',{method:'POST',body:JSON.stringify({username:'demo',password:'demo123456',role:'student'})});
+  const r=await api('/api/auth/register',{method:'POST',body:JSON.stringify({username:'demo',password:'demo123456',role:'teacher'})});
   if(r.ok||(r.data.detail&&r.data.detail.includes('already exists')))doLogin();
   else show('loginMsg',msg('注册演示账号失败','err'))
  }catch(e){show('loginMsg',msg('网络错误: '+e.message,'err'))}
