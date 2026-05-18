@@ -5,9 +5,11 @@ from pydantic import BaseModel, Field
 
 class SettingsStatusResponse(BaseModel):
     llm_provider: str
+    llm_model: str = ""
+    is_mock: bool = True
     deepseek_configured: bool
     embedding_provider: str
-    embedding_configured: bool
+    embedding_is_mock: bool = True
 
 
 class LLMConfigRequest(BaseModel):

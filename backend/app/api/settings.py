@@ -40,11 +40,15 @@ def _write_env_lines(lines: list[str]):
 @router.get("/status", response_model=SettingsStatusResponse)
 def api_settings_status():
     """Return current app configuration status without exposing keys."""
+    from app.services.llm_provider import get_llm_provider
+    provider = get_llm_provider()
     return SettingsStatusResponse(
-        llm_provider=settings.LLM_PROVIDER,
+        llm_provider=provider.provider,
+        llm_model=provider.model,
+        is_mock=(provider.provider == "mock"),
         deepseek_configured=bool(settings.DEEPSEEK_API_KEY),
         embedding_provider=settings.EMBEDDING_PROVIDER,
-        embedding_configured=settings.EMBEDDING_PROVIDER != "hash_mock",
+        embedding_is_mock=(settings.EMBEDDING_PROVIDER == "hash_mock"),
     )
 
 

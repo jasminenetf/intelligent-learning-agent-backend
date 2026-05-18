@@ -254,7 +254,15 @@ async function checkStatus(){
   show('statusResult',h);
   $('sysBadge').innerHTML=badge('🟢 '+d.provider+'/'+d.model,'ok');
   append('output',`<div class="card"><h3>系统状态</h3><pre>${esc(JSON.stringify(d,null,2))}</pre></div>`)
- }catch(e){show('statusResult',badge('连接失败','err'));$('sysBadge').innerHTML=badge('未连接','err')}
+ }catch(e){
+  // Fallback to public settings/status (no auth needed)
+  try{
+   const r=await api('/api/settings/status');const d=r.data;
+   let h=badge(d.is_mock?'Mock':'真LLM',d.is_mock?'err':'ok')+' '+badge(d.llm_provider,'ok')+' '+badge('Embedding:'+(d.embedding_is_mock?'Mock':d.embedding_provider),d.embedding_is_mock?'err':'ok')+' '+badge('DS:'+(d.deepseek_configured?'已配':'未配'),d.deepseek_configured?'ok':'err');
+   show('statusResult',h);
+   $('sysBadge').innerHTML=badge('🟢 '+d.llm_provider,d.is_mock?'warn':'ok');
+  }catch(e2){show('statusResult',badge('后端未连接','err'));$('sysBadge').innerHTML=badge('未连接','err')}
+ }
 }
 
 // ── Profile ──
