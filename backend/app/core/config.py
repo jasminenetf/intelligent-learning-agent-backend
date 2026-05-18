@@ -48,10 +48,17 @@ class Settings(BaseSettings):
     # Admin panel
     ADMIN_ENABLED: bool = False
 
+    # File upload
+    FILE_UPLOAD_MAX_MB: int = 80
+
     # Generated files
     GENERATED_DIR: str = "./data/generated"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        "env_file": [".env", "../.env"],  # CWD first, then project root fallback
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
 
 settings = Settings()

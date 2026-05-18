@@ -56,5 +56,8 @@ class LLMTestResponse(BaseModel):
 class LLMStatusResponse(BaseModel):
     provider: str
     model: str
+    is_mock: bool
     spark_configured: bool
     deepseek_configured: bool
+    embedding_provider: str
+    embedding_is_mock: bool

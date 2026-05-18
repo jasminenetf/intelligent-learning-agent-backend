@@ -5,7 +5,9 @@ import re
 import uuid
 from pathlib import Path
 
-MAX_FILE_SIZE = 30 * 1024 * 1024  # 30MB
+from app.core.config import settings
+
+MAX_FILE_SIZE = settings.FILE_UPLOAD_MAX_MB * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 
@@ -29,7 +31,8 @@ def validate_file_type(filename: str) -> str:
 def validate_file_size(file_size: int) -> None:
     """Raise ValueError if file exceeds limit."""
     if file_size > MAX_FILE_SIZE:
-        raise ValueError(f"file exceeds maximum allowed size of {MAX_FILE_SIZE // (1024*1024)}MB")
+        max_mb = settings.FILE_UPLOAD_MAX_MB
+        raise ValueError(f"file exceeds maximum allowed size of {max_mb}MB")
 
 
 def save_upload_file(file, course_id: int) -> dict:
