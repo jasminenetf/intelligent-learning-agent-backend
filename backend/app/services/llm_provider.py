@@ -64,6 +64,7 @@ class MockLLMProvider(BaseLLMProvider):
 
 class SparkLLMProvider(BaseLLMProvider):
     """Ifltyek Spark LLM via OpenAI-compatible HTTP API."""
+    provider = "spark"
 
     def __init__(self):
         self._client = OpenAI(
@@ -72,24 +73,25 @@ class SparkLLMProvider(BaseLLMProvider):
             timeout=settings.LLM_TIMEOUT_SECONDS,
             max_retries=settings.LLM_MAX_RETRIES,
         )
-        self._model = settings.SPARK_MODEL
+        self.model = settings.SPARK_MODEL
 
     def generate(self, messages: list[dict], temperature: float = 0.2) -> LLMResponse:
         resp = self._client.chat.completions.create(
-            model=self._model,
+            model=self.model,
             messages=messages,
             temperature=temperature,
         )
         return LLMResponse(
             content=resp.choices[0].message.content or "",
             provider="spark",
-            model=self._model,
+            model=self.model,
             raw=resp.model_dump() if hasattr(resp, "model_dump") else None,
         )
 
 
 class DeepSeekProvider(BaseLLMProvider):
     """DeepSeek via OpenAI-compatible API. Dev/debug backup only."""
+    provider = "deepseek"
 
     def __init__(self):
         self._client = OpenAI(
@@ -98,18 +100,18 @@ class DeepSeekProvider(BaseLLMProvider):
             timeout=settings.LLM_TIMEOUT_SECONDS,
             max_retries=settings.LLM_MAX_RETRIES,
         )
-        self._model = settings.DEEPSEEK_MODEL
+        self.model = settings.DEEPSEEK_MODEL
 
     def generate(self, messages: list[dict], temperature: float = 0.2) -> LLMResponse:
         resp = self._client.chat.completions.create(
-            model=self._model,
+            model=self.model,
             messages=messages,
             temperature=temperature,
         )
         return LLMResponse(
             content=resp.choices[0].message.content or "",
             provider="deepseek",
-            model=self._model,
+            model=self.model,
             raw=resp.model_dump() if hasattr(resp, "model_dump") else None,
         )
 
