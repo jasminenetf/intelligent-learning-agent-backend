@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     LLM_TIMEOUT_SECONDS: int = 60
     LLM_MAX_RETRIES: int = 2
 
+    # Admin panel
+    ADMIN_ENABLED: bool = False
+
     # Generated files
     GENERATED_DIR: str = "./data/generated"
 

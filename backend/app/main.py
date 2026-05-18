@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.admin import setup_admin
 from app.api.agent import router as agent_router
 from app.api.auth import router as auth_router
 from app.api.courses import router as courses_router
@@ -40,3 +41,6 @@ app.include_router(rag_router)
 app.include_router(qa_router)
 app.include_router(resources_router)
 app.include_router(agent_router)
+
+# Mount admin panel (conditional on ADMIN_ENABLED env var)
+setup_admin(app)
