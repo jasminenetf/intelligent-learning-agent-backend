@@ -87,6 +87,20 @@
 - **替代方案**：Dify/FastGPT（放弃——过重）；sentence-transformers（保留为可选）
 - **影响**：embedding_service.py, vector_store.py, rag_service.py, rag API
 
+## 决策 013：LangGraph 多智能体编排框架
+- **日期**：2026-05-17
+- **决策**：LangGraph v1.2.0 StateGraph 五节点线性 DAG
+- **原因**：StateGraph 节点通过共享 state 读写数据，适合教学流程严格性要求
+- **不采用**：CrewAI（控制力弱）、AutoGen（对话驱动不适合教学）
+- **影响**：agent_graph.py, agent API
+
+## 决策 014：阶段 7A 资源生成层不新增依赖
+- **日期**：2026-05-18
+- **决策**：阶段 7A 资源生成最小闭环不引入 mermaid-py / mermaid / LangChain chain / Python-pptx / Presenton
+- **原因**：JSON→Mermaid 是轻量格式转换，不需要 mermaid-py；Lecture Markdown 和 Quiz JSON 为纯文本拼接；RAG 和 LLM 复用已有 rag_service / llm_provider
+- **保留**：PPT、Presenton、SQLAdmin、LobeChat 后续阶段按开源成品优先原则处理
+- **影响**：resource_renderer.py, resource_generator.py, resources API
+
 ---
 
 ## 变更记录模板
