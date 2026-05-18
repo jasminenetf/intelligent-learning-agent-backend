@@ -159,6 +159,23 @@ def build_slide_deck(
             pass
 
     # Fallback to template (Mock)
+    summary = _extract_summary(chunks, 800)
+    bullets_1 = _extract_bullets(summary, 4, 0)
+    bullets_2 = _extract_bullets(summary, 4, 4)
+    bullets_3 = _extract_bullets(summary, 4, 8) if len(summary) > 200 else _extract_bullets(summary, 4, 4)
+    return {
+        "title": f"{topic}",
+        "subtitle": "智能学习Agent 自动生成",
+        "slides": [
+            {"type": "title", "title": f"{topic}", "subtitle": "智能学习Agent — 个性化课件", "bullets": [], "speaker_notes": ""},
+            {"type": "content", "title": "学习目标", "bullets": bullets_1, "speaker_notes": "基于课程资料自动生成"},
+            {"type": "content", "title": "核心概念", "bullets": bullets_2, "speaker_notes": "从上文提取的关键概念"},
+            {"type": "content", "title": "重点与难点", "bullets": bullets_3, "speaker_notes": "需要额外练习的内容"},
+            {"type": "content", "title": "练习建议", "bullets": ["完成课后习题", "制作思维导图", "做相关测验题", "复习易错概念"], "speaker_notes": ""},
+            {"type": "content", "title": "总结", "bullets": ["回顾核心概念", "整理知识框架", "准备下一主题"], "speaker_notes": "感谢使用智能学习Agent"},
+        ],
+        "generated_by": "fallback_template",
+    }
 def _extract_summary(chunks: list[dict], max_len: int = 800) -> str:
     """Extract a combined summary from retrieved chunks."""
     parts = []
