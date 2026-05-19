@@ -20,23 +20,16 @@ venv/
 .env.*
 !.env.example
 
-# Docker
-data/
-logs/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Database
+# Data — ignore runtime artifacts but keep seed data
 data/app.db
+data/chroma/
+data/raw/*/
+data/generated/
+backend/data/
 *.db
 *.sqlite
 
 # Uploads
-data/raw/
-data/generated/
-data/chroma/
 uploads/
 
 # Large/private
@@ -47,3 +40,7 @@ uploads/
 # Cache
 .cache/
 node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

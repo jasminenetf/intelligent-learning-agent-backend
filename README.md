@@ -1,68 +1,183 @@
-# 智能学习Agent — 高等教育个性化学习资源多智能体系统
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python" alt="Python">
+  <img src="https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi" alt="FastAPI">
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform">
+</p>
 
-## 项目概述
-面向高校的个性化学习资源生成与辅导系统，基于 LangGraph 多智能体架构和 Agentic RAG 技术。
+<h1 align="center">智学·多智能体</h1>
+<h3 align="center">Intelligent Learning Agent</h3>
+<p align="center">高等教育个性化学习资源多智能体系统</p>
 
-## 当前状态 (2026-05-19)
+---
 
-### ✅ R1 重构完成
-- 后端新增 `/api/app/*` 产品聚合 API（6 个端点）
-- 前端彻底重构为学习工作台（7 页导航）
-- 用户不再接触 Token/Course ID/API Base
-- 学习助手三栏布局（聊天 + Artifacts + 溯源）
-- 资源生成中心（资源卡片 + 进度 + 结果）
+## 项目简介
 
-### ✅ 已完成
-- 用户注册/登录 (JWT)
-- 课程管理 + 文件上传
-- OCR-W2 (PDF→文本→chunk→ChromaDB)
-- RAG 搜索 (真语义 Embedding)
-- RAG Q&A (DeepSeek 真模型 + 引用)
-- LangGraph 5Agent 多智能体 (supervisor→profile→rag→lecture→verifier)
-- SQLAdmin 管理后台 (/admin)
-- 8维学生画像 (DeepSeek 提取 + 正则规则 fallback)
-- 5类资源生成: mindmap, lecture_doc, quiz, ppt, study_plan (全部 DeepSeek 真模型)
-- OpenAI-compatible API (/v1/models, /v1/chat/completions)
-- 前端 Demo 页面 (纯 HTML+CSS+JS, http://127.0.0.1:5173)
-- 答辩材料 (PPT大纲/架构图/演示脚本/录屏脚本)
-- 真 Embedding: sentence-transformers all-MiniLM-L6-v2
-- 真 LLM: DeepSeek deepseek-chat (is_mock=false)
+智学·多智能体是一个面向高校的个性化学习资源生成与辅导系统。基于 **LangGraph 多智能体架构** 和 **Agentic RAG** 技术，为每门课程自动构建知识库，并生成个性化学习资源。
 
-### 🔄 进行中
-- 答辩彩排
+### 核心功能
 
-### ❌ 未完成
-- Tesseract OCR (扫描版 PDF)
-- 自动测试
+| 功能 | 说明 |
+|------|------|
+| 知识库构建 | 上传课程资料（PDF/DOCX/TXT）→ 自动解析 → 语义检索 |
+| 智能问答 | 基于课程知识库的 RAG Q&A，带文献引用溯源 |
+| 资源生成 | 思维导图、讲义文档、练习题、PPT课件、学习计划 |
+| 学生画像 | 8维学习特征分析，个性化推荐 |
+| 多智能体 | Supervisor → Profile → RAG → Lecture → Verifier |
 
-## 快速启动
+### 技术栈
 
-### 后端
+`FastAPI` `SQLModel` `ChromaDB` `LangGraph` `DeepSeek` `sentence-transformers` `python-pptx`
+
+---
+
+## 一键安装
+
+### Windows
+
 ```bash
-cd backend
-source ../.venv/bin/activate
-cp ../.env.example .env
-# 编辑 .env: 填入 DEEPSEEK_API_KEY=sk-xxx
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+# 1. 安装 WSL（如已安装可跳过）
+wsl --install
+
+# 2. 下载项目
+#    点击 GitHub 页面右上角绿色 "Code" 按钮 → Download ZIP
+#    解压到任意目录
+
+# 3. 双击 install.bat 自动安装
 ```
 
-### 前端 Demo
+### macOS / Linux
+
 ```bash
-cd frontend-demo
-python -m http.server 5173
-# 浏览器: http://127.0.0.1:5173
+# 1. 下载项目
+git clone https://github.com/jasminenetf/intelligent-learning-agent-backend.git
+cd intelligent-learning-agent-backend
+
+# 2. 一键安装
+bash install.sh
 ```
 
-## 技术栈
-FastAPI + SQLModel + ChromaDB + LangGraph + DeepSeek + sentence-transformers + python-pptx
+### 配置 API Key
 
-## 安全提醒
-- `backend/.env` 包含 API Key，已被 `.gitignore` 忽略
-- 不要将 `.env` 提交到 Git
+安装完成后，编辑 `backend/.env`，填入 DeepSeek API Key：
 
-## 文档
-- [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — 项目简介
-- [DECISIONS.md](DECISIONS.md) — 技术决策
-- [OSS_LICENSES.md](OSS_LICENSES.md) — 开源协议
-- [docs/handoff/](docs/handoff/) — 阶段报告
-- [docs/presentation/](docs/presentation/) — 答辩材料
+```ini
+DEEPSEEK_API_KEY=sk-你的APIKey
+```
+
+> 获取 API Key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)（新用户赠送 500 万 tokens）
+
+---
+
+## 启动
+
+### Windows
+双击 `启动智能学习Agent.bat`
+
+### macOS / Linux
+```bash
+bash scripts/start_app.sh
+```
+
+浏览器自动打开 → http://127.0.0.1:5173
+
+### 停止
+- Windows: 双击 `停止智能学习Agent.bat`
+- macOS / Linux: `bash scripts/stop_app.sh`
+
+---
+
+## 使用流程
+
+```
+打开页面 → 演示账号登录 → 数据看板 → 学习助手提问 → 资源生成
+```
+
+| 页面 | 功能 |
+|------|------|
+| 数据看板 | 课程状态、画像摘要、一键演示 |
+| 学习助手 | 三栏布局：聊天 + Artifacts + 文献溯源 |
+| 资源生成 | 5类资源卡片选择、生成进度、结果展示 |
+| 课程管理 | 课程列表、创建课程、上传资料 |
+| 知识库 | 知识块管理、ChromaDB状态、RAG检索测试 |
+| 学习路径 | 个性化学习步骤时间线 |
+| 设置 | API Key配置、连接测试、系统状态 |
+
+---
+
+## 项目结构
+
+```
+├── backend/                  # FastAPI 后端
+│   ├── app/
+│   │   ├── api/              # 14 个 API 路由
+│   │   ├── core/             # 配置、数据库、安全
+│   │   ├── models/           # SQLModel 数据模型
+│   │   ├── services/         # RAG、LLM、Agent 等服务
+│   │   └── main.py           # 应用入口
+│   ├── .env.example          # 环境变量模板
+│   └── requirements.txt      # Python 依赖
+├── frontend-demo/            # 前端（纯 HTML+CSS+JS）
+│   ├── index.html
+│   ├── app.css
+│   └── app.js
+├── seed/                     # 演示数据
+│   ├── demo_knowledge.txt    # 高等数学上知识文本
+│   └── seed_demo.py          # 数据库种子脚本
+├── scripts/
+│   ├── start_app.sh          # 启动脚本
+│   └── stop_app.sh           # 停止脚本
+├── install.sh                # 一键安装（Linux/macOS/WSL）
+├── install.bat               # 一键安装（Windows）
+├── 启动智能学习Agent.bat      # Windows 启动器
+└── 停止智能学习Agent.bat      # Windows 停止器
+```
+
+---
+
+## API 端点
+
+后端启动在 `http://127.0.0.1:8000`
+
+| 端点 | 说明 |
+|------|------|
+| `GET /api/app/bootstrap` | 启动自检（无需认证） |
+| `POST /api/app/demo-init` | 一键演示环境初始化 |
+| `GET /api/app/dashboard` | 数据看板 |
+| `POST /api/app/ask` | 课程问答（RAG） |
+| `POST /api/app/generate` | 资源生成 |
+| `GET /api/settings/status` | 系统配置状态 |
+| `POST /api/settings/llm` | 配置 LLM API Key |
+| `POST /api/settings/test-llm` | 测试 LLM 连接 |
+
+完整 API 文档: `http://127.0.0.1:8000/docs`
+
+---
+
+## 常见问题
+
+**Q: 启动后浏览器显示"未连接"？**
+A: 确认后端已启动。检查 `backend/.env` 是否存在，端口 8000 是否被占用。
+
+**Q: 问答/资源生成返回错误？**
+A: 确认已配置 DeepSeek API Key（设置页面可配置和测试连接）。
+
+**Q: 知识库为空？**
+A: 首次安装会自动导入演示知识库（高等数学上，约 16 个知识点）。如需添加更多课程，在"课程管理"上传资料。
+
+**Q: Windows 下 WSL 报错？**
+A: 确保 WSL 已安装并设置默认发行版：`wsl --install`，然后 `wsl --set-default Ubuntu`。
+
+---
+
+## 许可证
+
+MIT License
+
+## 作者
+
+jasminenetf
+
+---
+
+<p align="center"><sub>Built with FastAPI + LangGraph + DeepSeek</sub></p>
