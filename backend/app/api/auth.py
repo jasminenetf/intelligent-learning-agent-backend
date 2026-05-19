@@ -74,17 +74,41 @@ def get_current_user(
     return user
 
 
-from fastapi.security import HTTPBearer as _HTTPBearerOpt
+from fastapi import Request
+
+_optional_bearer = HTTPBearer(auto_error=False)
+
 
 def get_current_user_optional(
+    request: Request,
     session: Session = Depends(get_session),
 ) -> Optional[User]:
     """Dependency: try to authenticate, fall back to None (guest).
 
-    For LobeChat OpenAI-compatible endpoints where auth is optional.
-    Returns None for unauthenticated requests; caller handles guest behavior.
+    Reads Authorization: Bearer <token> header if present.
+    Returns authenticated User on success, None on any failure.
+    Caller handles guest behavior.
     """
-    return None
+    # Try Authorization header
+    auth = request.headers.get("Authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None
+
+    token = auth[7:]  # strip "Bearer "
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        return None
+
+    try:
+        user = session.get(User, int(user_id))
+    except (ValueError, TypeError):
+        return None
+
+    return user if user is not None else None
 
 
 @router.get("/me", response_model=UserRead)
