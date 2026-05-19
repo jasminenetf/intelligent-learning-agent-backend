@@ -64,19 +64,44 @@ window._toggleSidebar=function(){S.sidebarCollapsed=!S.sidebarCollapsed;const sb
 async function initApp(){
   try{
     const{ok,data}=await api('/api/app/bootstrap');
-    if(!ok)return;
+    if(!ok){showWelcome();return;}
     S.courses=data.courses||[];
     if(data.selected_course&&data.selected_course.id){S.courseId=data.selected_course.id;S.courseName=data.selected_course.name||'未选择';S.kbChunks=data.selected_course.chunks_count||0;S.kbReady=data.selected_course.has_knowledge_base||false;}
     if(data.user&&data.user.authenticated)S.user=data.user;
-    // Clear stale token if not authenticated, then init demo
     const isAuth = data.user && data.user.authenticated;
-    if(!isAuth && S.token){setToken('');S.user=null;}
-    if(data.next_step==='configure_key' && isAuth){navTo('settings');toast('请先配置 API Key','info');}
-    else if(!isAuth){await initDemo();navTo('assistant');}
-    else if(data.next_step==='create_course'){navTo('courses');toast('请创建课程','info');}
-    else{navTo('assistant');}
+    // Clear stale token, show welcome if not authenticated
+    if(!isAuth){setToken('');S.user=null;showWelcome();return;}
+    // Authenticated — go to assistant
+    if(!data.config.deepseek_configured){navTo('settings');toast('请先配置 AI 模型 Key','info');return;}
+    navTo('assistant');
     updateTopbar();
-  }catch(e){console.warn('Bootstrap:',e.message);navTo('settings');toast('无法连接后端','error');}
+  }catch(e){console.warn('Bootstrap:',e.message);showWelcome();}
+}
+
+function showWelcome(){
+  // Clear all pages, show welcome landing
+  $$('.page').forEach(p=>p.classList.remove('active'));
+  let w=document.getElementById('page-welcome');
+  if(!w){
+    w=document.createElement('main');w.id='page-welcome';w.className='page-content page active';
+    w.innerHTML='<div style="max-width:600px;margin:60px auto;text-align:center">'+
+      '<div style="font-size:48px;margin-bottom:16px">🎓</div>'+
+      '<h2 style="font-size:22px;font-weight:700;margin-bottom:8px">智学 · 多智能体学习工作台</h2>'+
+      '<p style="font-size:14px;color:var(--gray-500);margin-bottom:24px;line-height:1.8">基于课程资料、学生画像和多智能体协同<br>为你生成 问答、讲义、思维导图、测验、PPT 与学习路径</p>'+
+      '<div style="display:flex;justify-content:center;gap:20px;margin-bottom:28px;font-size:12px;color:var(--gray-500)">'+
+        '<div style="text-align:center"><div style="font-size:20px;margin-bottom:4px">🔌</div>连接 AI 模型</div>'+
+        '<div style="text-align:center"><div style="font-size:20px;margin-bottom:4px">👤</div>进入演示账号</div>'+
+        '<div style="text-align:center"><div style="font-size:20px;margin-bottom:4px">📚</div>选择课程资料</div>'+
+        '<div style="text-align:center"><div style="font-size:20px;margin-bottom:4px">🚀</div>开始个性化学习</div>'+
+      '</div>'+
+      '<button class="btn btn-lg btn-primary" id="btn-welcome-demo" style="font-size:15px;padding:12px 32px" onclick="_loginDemo()">🎯 进入演示学习环境</button>'+
+      '<div style="margin-top:12px"><button class="btn btn-outline btn-sm" onclick="navTo(\'settings\')">⚙️ 配置 API Key</button></div>'+
+      '<p style="font-size:11px;color:var(--gray-400);margin-top:16px">演示账号自动准备课程、画像和知识库 · 无需注册</p>'+
+    '</div>';
+    document.querySelector('.main-area').appendChild(w);
+  }
+  w.classList.add('active');
+  updateTopbar();
 }
 
 async function initDemo(){
@@ -108,7 +133,7 @@ async function loadDashboard(){
     h+='<div class="card grid-stat"><div class="val" style="color:var(--success)">✓</div><div class="lbl">AI模型已连接</div></div>';
     h+='<div class="card grid-stat"><div class="val">'+(kb.chunks_count||0)+'</div><div class="lbl">课程知识点</div></div>';
     h+='<div class="card grid-stat"><div class="val">'+(pf?'✓':'—')+'</div><div class="lbl">学习画像</div></div></div>';
-    if(d.course)h+='<div class="card"><div class="card-header"><h3>当前课程</h3></div><p style="font-size:15px;font-weight:700">'+esc(d.course.name)+'</p><p style="font-size:12px;color:var(--gray-500)">'+esc(d.course.description||'')+'</p><div style="display:flex;gap:20px;margin-top:8px;font-size:12px;color:var(--gray-500)"><span>知识点: '+(kb.chunks_count||0)+'</span><span>知识库索引: '+(kb.vector_ready?'就绪':'未构建')+'</span></div></div>';
+    if(d.course)h+='<div class="card"><div class="card-header"><h3>当前课程</h3></div><p style="font-size:15px;font-weight:700">'+esc(d.course.name)+'</p><p style="font-size:12px;color:var(--gray-500)">'+esc(d.course.description||'')+'</p><div style="display:flex;gap:20px;margin-top:8px;font-size:12px;color:var(--gray-500)"><span>知识点: '+(kb.chunks_count||0)+'</span><span>资料检索: '+(kb.vector_ready?'已就绪':'未构建')+'</span></div></div>';
     if(d.suggested_actions&&d.suggested_actions.length){h+='<div class="card"><div class="card-header"><h3>建议操作</h3></div>';d.suggested_actions.forEach(a=>{h+='<button class="btn btn-outline btn-sm" style="margin:4px" onclick="navTo(\''+(a.action==='start_qa'?'assistant':a.action==='configure_key'?'settings':a.action==='upload_materials'?'courses':'dashboard')+'\')">'+esc(a.label)+'</button>';});h+='</div>';}
     if(pf&&pf.knowledge_level)h+='<div class="card"><div class="card-header"><h3>学习画像</h3></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px"><div><b>知识水平:</b> '+esc(pf.knowledge_level||'—')+'</div><div><b>认知风格:</b> '+esc(pf.cognitive_style||'—')+'</div><div><b>学习节奏:</b> '+esc(pf.pace_preference||'—')+'</div><div><b>专业:</b> '+esc(pf.major||'—')+'</div></div></div>';
     h+='<div class="card"><div class="card-header"><h3>快捷操作</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="navTo(\'assistant\')">💬 开始学习</button><button class="btn btn-secondary" onclick="navTo(\'generator\')">⚡ 生成资源</button><button class="btn btn-outline" onclick="_runFullDemo()">🎯 一键演示</button></div></div>';
@@ -324,7 +349,7 @@ window._createCourse=async function(){const name=document.getElementById('new-co
 // ════════════ PAGE: KNOWLEDGE BASE ════════════
 function loadKnowledgeBase(){
   const el=document.getElementById('page-knowledge');
-  el.innerHTML='<div class="card"><div class="card-header"><h3>📚 知识库状态</h3></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center"><div class="grid-stat"><div class="val">'+(S.kbChunks||0)+'</div><div class="lbl">课程知识点</div></div><div class="grid-stat"><div class="val">'+(S.kbReady?'就绪':'未构建')+'</div><div class="lbl">知识库索引</div></div><div class="grid-stat"><div class="val">—</div><div class="lbl">扫描资料识别</div></div></div><div style="margin-top:12px;font-size:12px;color:var(--gray-500)"><p>当前课程: '+esc(S.courseName)+'</p><p>⚠ 扫描版PDF需安装Tesseract OCR，文字型PDF可自动解析</p></div></div><div class="card"><div class="card-header"><h3>🔍 课程资料检索测试</h3></div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="rag-query" placeholder="输入关键词: 导数、极限..." style="flex:1;padding:8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"><button class="btn btn-primary" onclick="_ragSearch()">检索</button></div><div id="rag-results"><div class="empty-state" style="padding:20px"><p style="font-size:12px;color:var(--gray-400)">输入关键词测试知识库检索</p></div></div></div>';
+  el.innerHTML='<div class="card"><div class="card-header"><h3>📚 知识库状态</h3></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center"><div class="grid-stat"><div class="val">'+(S.kbChunks||0)+'</div><div class="lbl">课程知识点</div></div><div class="grid-stat"><div class="val">'+(S.kbReady?'就绪':'未构建')+'</div><div class="lbl">资料检索</div></div><div class="grid-stat"><div class="val">—</div><div class="lbl">扫描资料</div></div></div><div style="margin-top:12px;font-size:12px;color:var(--gray-500)"><p>当前课程: '+esc(S.courseName)+'</p><p>⚠ 扫描版PDF需安装Tesseract OCR，文字型PDF可自动解析</p></div></div><div class="card"><div class="card-header"><h3>🔍 课程资料检索测试</h3></div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="rag-query" placeholder="输入关键词: 导数、极限..." style="flex:1;padding:8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"><button class="btn btn-primary" onclick="_ragSearch()">检索</button></div><div id="rag-results"><div class="empty-state" style="padding:20px"><p style="font-size:12px;color:var(--gray-400)">输入关键词测试知识库检索</p></div></div></div>';
 }
 
 window._ragSearch=async function(){const q=document.getElementById('rag-query')?.value.trim();if(!q)return;const el=$('#rag-results');el.innerHTML='<div class="loading-block"><span class="spinner"></span> 检索中...</div>';try{const{ok,data}=await api('/api/rag/courses/'+S.courseId+'/search?q='+encodeURIComponent(q)+'&top_k=5');if(ok&&data.results){let h='<p style="font-size:12px;color:var(--gray-500);margin-bottom:8px">找到 '+data.results.length+' 条结果</p>';data.results.forEach(r=>{h+='<div class="cite-item"><div class="cite-src">'+esc(r.source||'unknown')+'</div><div style="font-size:11px;margin-top:4px">'+esc((r.content||'').substring(0,200))+'</div><div class="cite-page">相关度: '+((r.score||0)*100).toFixed(0)+'%</div></div>';});el.innerHTML=h;}else el.innerHTML='<div class="empty-state"><p>无结果或知识库未构建</p></div>';}catch(e){el.innerHTML='<p style="color:var(--danger)">检索失败</p>';}};
@@ -342,7 +367,7 @@ function loadLearningPath(){
 function loadSettings(){
   const el=document.getElementById('page-settings');
   el.innerHTML='<div class="card"><div class="card-header"><h3>⚙️ API Key 配置</h3></div><div class="form-group"><label>API Key</label><input id="settings-key" type="password" placeholder="sk-..."><div class="form-hint">Key 仅保存在后端，不上传云端</div></div><div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="_saveSettings()">💾 保存</button><button class="btn btn-outline" onclick="_testConnection()">🔌 测试连接</button></div><div id="settings-status" style="margin-top:8px;font-size:12px"></div><div style="margin-top:12px"><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'settings-advanced\').style.display=document.getElementById(\'settings-advanced\').style.display===\'none\'?\'block\':\'none\'">⚙️ 高级设置</button></div><div id="settings-advanced" style="display:none;margin-top:8px"><div class="form-group"><label>API Base URL</label><input id="settings-base" value="https://api.deepseek.com/v1"></div><div class="form-group"><label>Model</label><input id="settings-model" value="deepseek-chat"></div></div></div><div class="card"><div class="card-header"><h3>📊 系统状态</h3></div><div id="settings-sys-status"><div class="loading-block"><span class="spinner"></span> 加载...</div></div></div><div class="card"><div class="card-header"><h3>🔒 安全说明</h3></div><p style="font-size:12px;color:var(--gray-500)">🔐 Key 仅保存在本地后端 .env · 🚫 不会上传云端 · ✅ 已排除 Git 跟踪</p></div>';
-  api('/api/settings/status').then(({ok,data})=>{const s=$('#settings-sys-status');if(ok)s.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px"><div><b>AI Provider:</b> '+esc(data.llm_provider||'—')+'</div><div><b>模型:</b> '+esc(data.llm_model||'—')+'</div><div><b>Mock模式:</b> '+(data.is_mock?'是':'否')+'</div><div><b>Key已配置:</b> '+(data.deepseek_configured?'✅':'❌')+'</div><div><b>语义检索:</b> '+esc(data.embedding_provider||'—')+'</div></div>';}).catch(()=>{});}
+  api('/api/settings/status').then(({ok,data})=>{const s=$('#settings-sys-status');if(ok)s.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px"><div><b>AI Provider:</b> '+esc(data.llm_provider||'—')+'</div><div><b>模型:</b> '+esc(data.llm_model||'—')+'</div><div><b>Mock模式:</b> '+(data.is_mock?'是':'否')+'</div><div><b>Key已配置:</b> '+(data.deepseek_configured?'✅':'❌')+'</div><div><b>资料检索:</b> '+(data.embedding_is_mock?'未启用':'已启用')+'</div></div>';}).catch(()=>{});}
 
 window._saveSettings=async function(){const key=document.getElementById('settings-key')?.value.trim(),base=document.getElementById('settings-base')?.value.trim(),model=document.getElementById('settings-model')?.value.trim();if(!key){toast('请输入 API Key','error');return;}const se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 保存中...';try{const{ok,data}=await api('/api/settings/llm',{method:'POST',body:JSON.stringify({provider:'deepseek',api_key:key,base_url:base||'https://api.deepseek.com/v1',model:model||'deepseek-chat'})});se.innerHTML=ok?'<span style="color:var(--success)">✅ 已保存</span>':'<span style="color:var(--danger)">❌ 失败: '+esc(data.detail||'')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
 window._testConnection=async function(){const se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 测试中...';try{const{ok,data}=await api('/api/settings/test-llm',{method:'POST',body:JSON.stringify({message:'你好，请回复连接成功'})});se.innerHTML=(ok&&data.ok)?'<span style="color:var(--success)">✅ 连接成功! '+data.latency_ms+'ms</span>':'<span style="color:var(--danger)">❌ '+esc(data.error||'连接失败')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
@@ -350,27 +375,46 @@ window._testConnection=async function(){const se=$('#settings-status');se.innerH
 // ════════════ FULL DEMO ════════════
 window._runFullDemo=async function(){
   if(!S.token){toast('请先登录','error');return;}
-  const stepNames=['系统状态','画像提取','RAG问答','学习路径','思维导图','测验','PPT'];
+  const stepNames=['检查模型','准备课程','分析画像','资料检索','生成回答','生成导图','生成测验','生成讲义','生成PPT','完成展示'];
   navTo('dashboard');const el=document.getElementById('page-dashboard');
-  el.innerHTML='<div class="card"><div class="card-header"><h3>🎯 一键演示</h3></div><div class="demo-steps" id="demo-steps">'+stepNames.map(s=>'<div class="demo-step" id="dstep-'+s+'">'+s+'</div>').join('')+'</div><div id="demo-output" style="margin-top:12px;font-size:12px"></div></div>';
+  el.innerHTML='<div class="card"><div class="card-header"><h3>🎯 全流程演示</h3></div><div class="demo-steps" id="demo-steps">'+stepNames.map(s=>'<div class="demo-step" id="dstep-'+s+'">'+s+'</div>').join('')+'</div><div id="demo-output" style="margin-top:12px;font-size:12px"></div></div>';
   const markStep=(name,status)=>{const s=document.getElementById('dstep-'+name);if(s)s.className='demo-step '+status;};
-  stepNames.forEach(s=>markStep(s,'running'));
-  const out=$('#demo-output');out.innerHTML='<span class="spinner"></span> 正在运行全流程演示...';
+  const delay=ms=>new Promise(r=>setTimeout(r,ms));
+  const out=$('#demo-output');
+
+  // Animate pre-steps
+  for(let i=0;i<3;i++){markStep(stepNames[i],'running');out.innerHTML='<span class="spinner"></span> '+stepNames[i]+'...';await delay(300);markStep(stepNames[i],'done');}
+  markStep(stepNames[3],'running');
   try{
-    const{ok,data}=await api('/api/app/run-demo',{method:'POST',body:JSON.stringify({course_id:S.courseId})});out.innerHTML='';
-    if(data.steps)data.steps.forEach(s=>{markStep(s.name,s.status==='success'?'done':'fail');out.innerHTML+='<div style="margin:2px 0">'+(s.status==='success'?'✅':'❌')+' '+s.name+': '+esc(s.detail||'')+'</div>';});
+    const{ok,data}=await api('/api/app/run-demo',{method:'POST',body:JSON.stringify({course_id:S.courseId})});
+    markStep(stepNames[3],'done');
+    // Animate remaining steps
+    const resNames=['生成回答','生成导图','生成测验','生成讲义','生成PPT'];
+    for(let i=0;i<resNames.length;i++){const n=resNames[i];const si=stepNames.indexOf(n);if(si>=0)markStep(stepNames[si],'running');out.innerHTML='<span class="spinner"></span> '+n+'...';await delay(400);if(si>=0)markStep(stepNames[si],'done');}
+    markStep('完成展示','done');
+    out.innerHTML='';
+
+    if(data.steps)data.steps.forEach(s=>{out.innerHTML+='<div style="margin:2px 0">'+(s.status==='success'?'✅':'❌')+' '+s.name+': '+esc(s.detail||'')+'</div>';});
+
     if(ok&&data.demo_results){
       S.demoResults=data.demo_results;
-      // Fill artifacts
       const dr=data.demo_results,rs=dr.resources||{};
+      const resCount=Object.keys(rs).length;
+      const citCount=(dr.citations||[]).length;
+
+      // Result summary card
+      out.innerHTML+='<div class="card" style="margin-top:12px;background:var(--primary-bg);border:1px solid var(--primary-light)"><div class="card-header"><h3>✅ 演示完成</h3></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px"><div>📝 RAG 问答已完成</div><div>📚 引用 '+citCount+' 条课程资料</div><div>🧠 已生成 '+resCount+' 类学习资源</div><div>📊 PPT 可下载</div></div><div style="margin-top:8px"><button class="btn btn-primary" onclick="navTo(\'assistant\');_switchArtifactTab(\'mindmap\')">👀 查看思维导图</button> <button class="btn btn-outline" onclick="navTo(\'generator\')">📋 查看全部资源</button></div></div>';
+
+      // Fill artifacts
       if(dr.answer){const msgs=$('#chat-messages');msgs.innerHTML='';msgs.innerHTML+='<div class="msg-bubble user"><div class="msg-content">'+esc(dr.question||'')+'</div></div>';msgs.innerHTML+='<div class="msg-bubble agent"><div class="msg-content">'+fmtAns(dr.answer).substring(0,500)+'...</div></div>';if(dr.citations)renderCitations(dr.citations);}
       if(rs.mindmap)renderArtifact('mindmap',rs.mindmap);
       if(rs.quiz)renderArtifact('quiz',rs.quiz);
       if(rs.lecture_doc)renderArtifact('lecture',rs.lecture_doc);
       if(rs.ppt)renderArtifact('ppt',rs.ppt);
       if(rs.study_plan)renderArtifact('study_plan',{study_plan:rs.study_plan});
-      out.innerHTML+='<div style="margin-top:8px"><button class="btn btn-primary" onclick="navTo(\'assistant\')">👀 查看完整结果</button></div>';
-      setTimeout(()=>{navTo('assistant');_switchArtifactTab('mindmap');},500);
+      // Auto-navigate after short delay
+      toast('演示完成！已生成 问答、思维导图、测验、讲义、PPT 和学习路径','success');
+      setTimeout(()=>{navTo('assistant');_switchArtifactTab('mindmap');},1500);
     }
   }catch(e){stepNames.forEach(s=>markStep(s,'fail'));out.innerHTML='<div style="color:var(--danger)">演示失败: '+esc(e.message)+'</div>';}
 };
