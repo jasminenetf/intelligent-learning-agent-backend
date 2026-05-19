@@ -179,6 +179,15 @@ async function initDemo() {
         const {ok:ok2, data:d2} = await api('/api/app/bootstrap');
         if (ok2 && d2.courses) S.courses = d2.courses;
       } catch(e) { /* non-critical */ }
+      // Also cache course from demo-init as fallback
+      if (data.course && data.course.id && (!S.courses || S.courses.length === 0)) {
+        S.courses = [{
+          id: data.course.id,
+          name: data.course.name,
+          chunks_count: data.course.chunks_count || 0,
+          has_knowledge_base: data.course.has_knowledge_base || false,
+        }];
+      }
       updateTopbar();
       if (data.course && data.course.recommended_for_demo) {
         toast('演示环境已就绪（课程: '+esc(data.course.name)+', '+data.course.chunks_count+' 知识块）', 'success');
