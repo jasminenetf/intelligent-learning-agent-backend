@@ -1,8 +1,18 @@
-# 智能学习Agent — 前端 Demo
+# 智学·多智能体 — 前端学习工作台
 
 ## 定位
 
-比赛答辩用的最小前端页面。单文件 HTML，零依赖构建，可直接用于答辩录屏。
+产品级 AI 学习工作台。不是 API 调试面板，是围绕学生/教师真实使用流程设计的学习软件。
+
+## 文件结构
+
+```
+frontend-demo/
+├── index.html   — 应用入口（HTML 结构 + 7 页面布局）
+├── app.css      — 产品级样式（侧边栏、三栏布局、卡片、进度等）
+├── app.js       — 单页应用逻辑（API、导航、页面渲染）
+└── README.md
+```
 
 ## 启动方式
 
@@ -20,55 +30,38 @@ python -m http.server 5173
 # http://127.0.0.1:5173
 ```
 
-## 登录方式
+## 页面导航
 
-- **方式 A**：左侧登录表单输入用户名/密码，点击登录（支持 admin_ocr / admintest123）
-- **方式 B**：手动从 Swagger 获取 Token 后粘贴到"Token"输入框
+| 页面 | 功能 |
+|------|------|
+| 数据看板 | 课程状态、画像摘要、建议操作、一键演示 |
+| 学习助手 | 三栏：聊天对话 + Artifacts 展示 + 文献溯源 |
+| 资源生成 | 资源卡片选择、生成进度、结果 Tab 展示 |
+| 课程管理 | 课程列表、选择当前课程、创建课程 |
+| 知识库 | 知识块状态、ChromaDB 状态、RAG 检索测试 |
+| 学习路径 | 个性化学习步骤时间线 |
+| 设置 | API Key 配置、连接测试、系统状态 |
 
-## course_id 获取
+## 用户流程
 
-```bash
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/courses
-```
-
-默认已预填 course_id=2（高等数学上）
-
-## 演示流程
-
-1. 点击"登录"获取 Token
-2. 点击"检查状态"确认 DeepSeek 在线
-3. 点击"提取画像"生成 8 维学生画像
-4. 输入问题 → "提问"进行 RAG 问答
-5. 选择资源类型 → "生成资源"（mindmap/lecture/quiz/ppt/study_plan）
-6. 思维导图自动 Mermaid 渲染
-7. 测验题卡片展示
-8. PPT 点击下载
-9. 学习路径步骤卡片展示
-10. 点击"全流程演示"一键跑完所有步骤
-
-## 常见问题
-
-### CORS 错误
-后端已配置 CORS（见 backend/app/main.py），支持 127.0.0.1:5173 / localhost:5173
-
-### Token 过期
-重新登录即可
-
-### 后端未启动
-检查 8000 端口：`curl http://127.0.0.1:8000/health`
-
-### 资源生成耗时
-DeepSeek 生成需 5-15 秒/类，study_plan 最快，quiz 和 lecture 较慢
-
-### PPT 下载
-点击下载链接，浏览器会自动下载 .pptx 文件。如被拦截，检查弹窗设置
-
-### Mermaid 不渲染
-检查网络能否访问 cdn.jsdelivr.net。如离线，mindmap 仍会显示纯文本 Mermaid 源码
+1. 打开页面 → 自动检测连接
+2. 点击"演示账号登录" → 自动初始化
+3. 数据看板查看状态
+4. 学习助手：左侧提问 → 中间看资源 → 右侧看引用
+5. 资源生成：选类型 → 看进度 → 下载 PPT
 
 ## 技术说明
 
-- 纯 HTML+CSS+JS，无构建工具
+- 纯 HTML+CSS+JS，零构建工具
 - Mermaid 通过 CDN 加载（jsdelivr）
-- 所有 API 调用通过 fetch + JWT Bearer Token
-- CORS 由后端 FastAPI CORSMiddleware 处理
+- 使用 `/api/app/*` 聚合接口，不直接调用底层 API
+- JWT Token 保存在 localStorage
+- 不暴露 Token/Course ID/API Base 给用户
+
+## 设计原则
+
+- 用户不接触工程概念（Token, Course ID, API Base）
+- 所有页面有内容，无大面积空白
+- 每个状态有下一步引导
+- 5 类资源有可视化展示区
+- 三栏布局降低认知负载

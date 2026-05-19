@@ -1,262 +1,133 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>智能学习Agent — 资源面板</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>智学·多智能体 — 学习工作台</title>
+<link rel="stylesheet" href="app.css">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font:14px/1.5 'Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333}
-.hdr{background:linear-gradient(135deg,#1a56db,#2563eb);color:#fff;padding:10px 20px;display:flex;justify-content:space-between;align-items:center}
-.hdr h1{font-size:18px}.hdr span{font-size:12px;opacity:.85}
-.main{display:flex;height:calc(100vh - 54px)}
-.ctrl{width:340px;overflow-y:auto;padding:14px;background:#fff;border-right:1px solid #e0e0e0}
-.view{flex:1;overflow-y:auto;padding:16px;background:#f8f9fb}
-h3{font-size:13px;color:#1a56db;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:5px}
-.block{background:#fff;border-radius:8px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-label{font-size:11px;color:#666;display:block;margin:4px 0 2px}
-input,select,textarea{width:100%;padding:7px;border:1px solid #d0d5dd;border-radius:4px;font-size:13px;margin-bottom:4px}
-input:focus,select:focus,textarea:focus{outline:none;border-color:#1a56db}
-button{padding:7px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;font-weight:500}
-.btn-b{background:#1a56db;color:#fff}.btn-b:hover{background:#1e40af}
-.btn-s{background:#e8f0fe;color:#1a56db}.btn-s:hover{background:#d0e2fd}
-.btn-g{background:#d1fae5;color:#059669}
-.btn-lg{width:100%;margin-top:6px}
-.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;margin:2px}
-.b-ok{background:#d1fae5;color:#059669}.b-w{background:#fef3c7;color:#d97706}.b-e{background:#fee2e2;color:#dc2626}
-.msg{padding:6px 10px;border-radius:4px;font-size:12px;margin:4px 0}
-.m-ok{background:#d1fae5;color:#059669}.m-e{background:#fee2e2;color:#dc2626}.m-i{background:#e8f0fe;color:#1a56db}
-.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px}
-.grid2 div{padding:2px 0}
-.grid2 b{color:#555}
-pre{background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;max-height:200px}
-.qcard{border:1px solid #e0e0e0;border-radius:6px;padding:8px;margin:6px 0;font-size:13px}
-.qcard .qq{font-weight:700;margin-bottom:3px}
-.qcard .oo{padding:3px 6px;margin:1px 0;border-radius:3px;font-size:12px}
-.qcard .oo.ans{background:#d1fae5;font-weight:700}
-.qcard .ex{font-size:11px;color:#666;margin-top:4px;padding-top:4px;border-top:1px dashed #eee}
-.scard{display:flex;gap:10px;padding:8px;border-left:3px solid #1a56db;margin:6px 0;background:#f8f9fb;border-radius:0 6px 6px 0}
-.scard .n{font-size:20px;font-weight:700;color:#1a56db;min-width:36px;text-align:center}
-.scard h4{font-size:13px}.scard p{font-size:11px;color:#666;margin:1px 0}
-.spin{display:inline-block;width:12px;height:12px;border:2px solid #ccc;border-top-color:#1a56db;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:4px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.bar{display:flex;gap:6px;margin:8px 0}
-.bar .st{flex:1;text-align:center;font-size:10px;padding:6px 2px;border-radius:4px;background:#f0f0f0;color:#999}
-.bar .st.d{background:#d1fae5;color:#059669}
-.bar .st.r{background:#e8f0fe;color:#1a56db;font-weight:600}
-.bar .st.f{background:#fee2e2;color:#dc2626}
-</style>
 </head>
 <body>
-<div class="hdr"><div><h1>智能学习Agent</h1><span>高等教育个性化学习资源多智能体系统</span></div><div id="top"></div></div>
-<div class="main">
+<div id="toast" class="toast" style="display:none"></div>
 
-<div class="ctrl">
-<div class="block">
-<h3>连接</h3>
-<label>API Base</label><input id="apiBase" value="http://127.0.0.1:8000">
-<label>Token</label><input id="token" placeholder="登录后自动填入">
-<div class="row" style="margin-top:4px"><button class="btn-b" onclick="login()">登录</button><button class="btn-s" onclick="regDemo()">演示账号</button><button class="btn-s" onclick="check()">检查状态</button></div>
-<div id="msgLogin"></div>
+<div class="app">
+<!-- ═══════════════════ SIDEBAR ═══════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">智</div>
+    <span class="logo-text">智学·多智能体</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" data-page="dashboard">
+      <span class="nav-icon">📊</span><span>数据看板</span>
+    </div>
+    <div class="nav-item" data-page="assistant">
+      <span class="nav-icon">💬</span><span>学习助手</span>
+    </div>
+    <div class="nav-item" data-page="generator">
+      <span class="nav-icon">⚡</span><span>资源生成</span>
+    </div>
+    <div class="nav-item" data-page="courses">
+      <span class="nav-icon">📚</span><span>课程管理</span>
+    </div>
+    <div class="nav-item" data-page="knowledge">
+      <span class="nav-icon">🧠</span><span>知识库</span>
+    </div>
+    <div class="nav-item" data-page="learning-path">
+      <span class="nav-icon">🗺️</span><span>学习路径</span>
+    </div>
+    <div class="nav-item" data-page="settings">
+      <span class="nav-icon">⚙️</span><span>设置</span>
+    </div>
+  </nav>
+  <div class="sidebar-footer" id="sidebar-footer">
+    <span class="status-dot offline"></span> 未连接
+  </div>
+</aside>
+
+<!-- ═══════════════════ MAIN AREA ═══════════════════ -->
+<div class="main-area">
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-toggle" onclick="_toggleSidebar()">☰</span>
+      <span class="topbar-course" id="topbar-course">未选择</span>
+      <span class="topbar-badge warn" id="topbar-badge">未登录</span>
+    </div>
+    <div class="topbar-right">
+      <span style="font-size:11px;color:var(--gray-400)" id="topbar-time"></span>
+      <div class="topbar-user" id="topbar-user">
+        <button class="btn btn-sm btn-primary" onclick="_loginDemo()">演示账号登录</button>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="_logout()" style="display:none" id="btn-logout">退出</button>
+    </div>
+  </header>
+
+  <!-- ═══════ PAGE: Dashboard ═══════ -->
+  <main class="page-content page active" id="page-dashboard"></main>
+
+  <!-- ═══════ PAGE: Assistant ═══════ -->
+  <main class="page-content page" id="page-assistant">
+    <div class="assistant-layout">
+      <!-- Chat Panel -->
+      <div class="chat-panel">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-area">
+          <div class="chat-input-row">
+            <textarea id="chat-input" placeholder="向 Tutor Agent 提问..." rows="2"></textarea>
+            <button class="btn btn-primary" onclick="_sendQuestion()">发送</button>
+          </div>
+          <div class="chat-quick-btns">
+            <button onclick="_quickGenerate('mindmap')">🧠 生成思维导图</button>
+            <button onclick="_quickGenerate('quiz')">📝 启动测验</button>
+            <button onclick="_quickGenerate('lecture_doc')">📄 生成讲义</button>
+            <button onclick="_quickGenerate('ppt')">📊 生成PPT</button>
+            <button onclick="_quickGenerate('study_plan')">🗺️ 学习路径</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Artifacts Panel -->
+      <div class="artifacts-panel">
+        <div class="artifacts-tabs" id="artifacts-tabs"></div>
+        <div class="artifacts-content" id="artifacts-content">
+          <div class="tab-panel" id="artifact-mindmap"><div class="empty-state"><div class="empty-icon">🧠</div><p>思维导图展示区</p><p style="font-size:11px;color:var(--gray-400)">提问后生成或点击快捷按钮</p></div></div>
+          <div class="tab-panel" id="artifact-quiz"><div class="empty-state"><div class="empty-icon">📝</div><p>练习题库展示区</p></div></div>
+          <div class="tab-panel" id="artifact-lecture"><div class="empty-state"><div class="empty-icon">📄</div><p>讲义文档展示区</p></div></div>
+          <div class="tab-panel" id="artifact-ppt"><div class="empty-state"><div class="empty-icon">📊</div><p>PPT预习区</p></div></div>
+          <div class="tab-panel" id="artifact-study_plan"><div class="empty-state"><div class="empty-icon">🗺️</div><p>学习路径展示区</p></div></div>
+        </div>
+      </div>
+
+      <!-- Citations Panel -->
+      <div class="citations-panel" id="citations-panel">
+        <h4>📚 文献溯源</h4>
+        <p style="font-size:12px;color:var(--gray-400)">提问后显示引用来源</p>
+        <div class="profile-mini" id="profile-mini" style="margin-top:12px">
+          <h4>🎓 学习画像</h4>
+          <p style="font-size:11px;color:var(--gray-400)">尚未提取画像</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══════ PAGE: Generator ═══════ -->
+  <main class="page-content page" id="page-generator"></main>
+
+  <!-- ═══════ PAGE: Courses ═══════ -->
+  <main class="page-content page" id="page-courses"></main>
+
+  <!-- ═══════ PAGE: Knowledge Base ═══════ -->
+  <main class="page-content page" id="page-knowledge"></main>
+
+  <!-- ═══════ PAGE: Learning Path ═══════ -->
+  <main class="page-content page" id="page-learning-path"></main>
+
+  <!-- ═══════ PAGE: Settings ═══════ -->
+  <main class="page-content page" id="page-settings"></main>
+</div>
 </div>
 
-<div class="block">
-<h3>课程</h3>
-<div class="row"><button class="btn-s" onclick="listCourses()">刷新</button><button class="btn-s" onclick="createCourse()">创建高等数学</button></div>
-<select id="courseSel" onchange="cid=this.value" style="margin-top:4px"></select>
-<label>Course ID</label><input id="courseId" value="2" readonly style="background:#f0f0f0">
-</div>
-
-<div class="block">
-<h3>学习画像（自动分析）</h3>
-<p style="font-size:11px;color:#999;margin-bottom:8px">基于对话和问答自动提取，无需手填</p>
-<button class="btn-b btn-lg" onclick="extract()">分析学习特征</button>
-<button class="btn-s" style="width:100%;margin-top:4px" onclick="getProfile()">查看当前画像</button>
-<div id="profResult"></div>
-</div>
-
-<div class="block">
-<h3>资源生成</h3>
-<label>主题</label><input id="topic" value="导数与极限入门">
-<label>类型（多选）</label>
-<select id="rtype" multiple size="5" style="height:auto">
-<option value="mindmap" selected>思维导图</option>
-<option value="lecture_doc">讲义</option>
-<option value="quiz">测验</option>
-<option value="ppt">PPT课件</option>
-<option value="study_plan">学习路径</option>
-</select>
-<button class="btn-b btn-lg" onclick="generate()">生成资源</button>
-</div>
-
-<div class="block">
-<h3>一键演示</h3>
-<button class="btn-b btn-lg" onclick="demo()">全流程演示</button>
-<div id="demoBar" class="bar"></div>
-</div>
-</div>
-
-<div class="view" id="out">
-<div style="text-align:center;color:#aaa;padding:80px 20px">
-<p style="font-size:36px;margin-bottom:12px"></p>
-<p>登录后开始使用</p>
-<p style="font-size:11px;margin-top:6px">聊天功能请使用 LobeChat 对接 /v1</p>
-</div>
-</div></div>
-
-<script>
-mermaid.initialize({startOnLoad:false,theme:'default'});
-const el=id=>document.getElementById(id);
-let cid='2';
-function api(path,opts={}){
- const base=el('apiBase').value.replace(/\/$/,'');
- const t=el('token').value.trim();
- const h={'Content-Type':'application/json'};
- if(t)h['Authorization']='Bearer '+t;
- return fetch(base+path,{...opts,headers:h}).then(r=>r.json().then(d=>({ok:r.ok,status:r.status,data:d})));
-}
-function b(t,c){return`<span class="badge b-${c}">${t}</span>`}
-function m(t,c){return`<div class="msg m-${c}">${t}</div>`}
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-
-async function login(){
- try{
-  const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:'admin_ocr',password:'admintest123'})});
-  if(r.ok){el('token').value=r.data.access_token;el('msgLogin').innerHTML=m('登录成功','ok');check()}
-  else el('msgLogin').innerHTML=m('失败: '+(r.data.detail||''),'e')
- }catch(e){el('msgLogin').innerHTML=m('错误: '+e.message,'e')}
-}
-async function regDemo(){
- try{
-  let r=await api('/api/auth/register',{method:'POST',body:JSON.stringify({username:'demo',password:'demo123456',role:'teacher'})});
-  if(r.ok||(r.data.detail&&r.data.detail.includes('already exists'))){
-   r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:'demo',password:'demo123456'})});
-   if(r.ok){el('token').value=r.data.access_token;el('msgLogin').innerHTML=m('演示账号已登录','ok');listCourses()}
-  }
- }catch(e){el('msgLogin').innerHTML=m('错误: '+e.message,'e')}
-}
-async function check(){
- try{
-  const r=await api('/api/llm/status');const d=r.data;
-  let h=b(d.is_mock?'Mock':'真LLM',d.is_mock?'e':'ok')+' '+b(d.provider,'ok')+' '+b('Embedding:'+(d.embedding_is_mock?'Mock':d.embedding_provider),d.embedding_is_mock?'e':'ok')+' '+b('DS:'+(d.deepseek_configured?'已配':'未配'),d.deepseek_configured?'ok':'e');
-  el('top').innerHTML=h;
-  el('out').innerHTML=`<div class="block"><h3>系统状态</h3><pre>${esc(JSON.stringify(d,null,2))}</pre></div>`
- }catch(e){
-  try{
-   const r=await api('/api/settings/status');const d=r.data;
-   let h=b(d.is_mock?'Mock':'真LLM',d.is_mock?'e':'ok')+' '+b(d.llm_provider,'ok')+' '+b('Embedding:'+(d.embedding_is_mock?'Mock':d.embedding_provider),d.embedding_is_mock?'e':'ok');
-   el('top').innerHTML=h
-  }catch(e2){el('top').innerHTML=b('未连接','e')}
- }
-}
-async function listCourses(){
- try{
-  const r=await api('/api/courses');
-  if(r.ok&&Array.isArray(r.data)){
-   const s=el('courseSel');s.innerHTML='';
-   r.data.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.text=c.name+' (ID:'+c.id+')';s.appendChild(o)});
-   // Keep current cid unless it doesn't exist in list
-   const exists=r.data.some(c=>c.id==cid);
-   if(!exists&&r.data.length){cid=r.data[0].id;el('courseId').value=cid;s.value=cid}
-   else{s.value=cid}
-  }
- }catch(e){}
-}
-async function createCourse(){
- try{
-  const r=await api('/api/courses',{method:'POST',body:JSON.stringify({name:'高等数学',description:'高等数学个性化学习示例课程'})});
-  if(r.ok){el('courseId').value=r.data.id;cid=r.data.id;listCourses();el('out').innerHTML=m('课程创建成功 ID='+r.data.id,'ok')}
-  else el('out').innerHTML=m('创建失败，请用teacher账号','e')
- }catch(e){el('out').innerHTML=m('错误: '+e.message,'e')}
-}
-async function extract(){
- if(!el('token').value.trim()){el('out').innerHTML=m('请先登录','e');return}
- el('profResult').innerHTML='<span class="spin"></span> 分析中（基于对话和问答记录）...';
- try{
-  const msg='请分析该学生的学习特征，包括知识薄弱点、学习风格偏好、适合的学习节奏。';
-  const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:msg})});
-  if(!r.ok){el('profResult').innerHTML=m('分析失败','e');return}
-  const d=r.data;
-  let h='<div class="grid2">';
-  [['知识水平',d.knowledge_level],['认知风格',d.cognitive_style],['学习节奏',d.pace_preference],['动机',d.motivation||'N/A'],['元学习',d.meta_learning_level],['置信度',(d.confidence||0).toFixed(2)],['专业',d.major||'N/A'],['目标',d.learning_goal||'N/A']].forEach(([k,v])=>{h+=`<div><b>${k}:</b> ${v}</div>`});
-  h+='</div>';
-  if(d.weak_points&&d.weak_points.length)h+=`<div style="font-size:12px;margin-top:4px"><b>薄弱点:</b> ${d.weak_points.join('、')}</div>`;
-  el('profResult').innerHTML=h;
-  el('out').innerHTML=`<div class="block"><h3>学习画像分析</h3>${h}<pre style="margin-top:8px;max-height:150px">${esc(JSON.stringify(d,null,2))}</pre></div>`
- }catch(e){el('profResult').innerHTML=m('错误: '+e.message,'e')}
-}
-async function getProfile(){
- try{
-  const r=await api('/api/profiles/me');
-  if(!r.ok){el('out').innerHTML=m('无画像数据','i');return}
-  const d=r.data;let h=`<div class="block"><h3>学习画像</h3><div class="grid2">`;
-  [['知识水平',d.knowledge_level],['认知风格',d.cognitive_style],['学习节奏',d.pace_preference],['专业',d.major||'N/A'],['目标',d.learning_goal||'N/A'],['动机',d.motivation||'N/A']].forEach(([k,v])=>{h+=`<div><b>${k}:</b> ${v}</div>`});
-  h+='</div></div>';
-  el('out').innerHTML=h
- }catch(e){el('out').innerHTML=m('获取失败','e')}
-}
-async function generate(){
- const types=Array.from(el('rtype').selectedOptions).map(o=>o.value);
- if(!types.length){el('out').innerHTML=m('请选择至少一种资源类型','e');return}
- // Check login
- if(!el('token').value.trim()){el('out').innerHTML=m('请先点击"登录"或"演示账号"','e');return}
- el('out').innerHTML='<div class="block" style="text-align:center;padding:40px"><span class="spin"></span> <b>DeepSeek 生成中，请等待 10-30 秒...</b><p style="font-size:11px;color:#999;margin-top:8px">正在调用 DeepSeek API 生成个性化学习资源</p></div>';
- try{
-  const r=await api(`/api/resources/courses/${cid}/generate`,{method:'POST',body:JSON.stringify({topic:el('topic').value,resource_types:types,top_k:8})});
-  if(!r.ok){
-   const detail=r.data?.detail||'未知错误';
-   if(r.status===401)el('out').innerHTML=m('登录已过期，请重新登录','e');
-   else el('out').innerHTML=m('生成失败: '+detail,'e');
-   return
-  }
-  let h='';
-  r.data.resources.forEach(res=>{
-   h+=`<div class="block"><h3>${res.type} — ${esc(res.title||'')}</h3><div class="row">${b(res.generated_by,res.fallback_used?'w':'ok')}</div>`;
-   if(res.mermaid){const mid='m'+Math.random().toString(36).slice(2,8);h+=`<pre>${esc(res.mermaid)}</pre><div class="mermaid" id="${mid}">${res.mermaid}</div>`;setTimeout(()=>{try{mermaid.run({nodes:[document.getElementById(mid)]})}catch(e){}},300)}
-   if(res.content)h+=`<div style="white-space:pre-wrap;max-height:300px;overflow-y:auto;background:#f8f9fb;padding:8px;border-radius:4px;font-size:12px">${esc(res.content).substring(0,2000)}</div>`;
-   if(res.items)res.items.forEach((it,i)=>{h+=`<div class="qcard"><div class="qq">Q${i+1}. ${esc(it.question)}</div>`;it.options.forEach((o,j)=>{h+=`<div class="oo${j===it.answer?' ans':''}">${String.fromCharCode(65+j)}. ${esc(o)}${j===it.answer?'  ✓':''}</div>`});h+=`<div class="ex">${esc(it.explanation||'')}</div></div>`});
-   if(res.download_url)h+=`<div style="margin:8px 0"><b>${res.slide_count||'?'} 页</b> <a href="${el('apiBase').value.replace(/\/$/,'')}${res.download_url}" target="_blank" style="display:inline-block;padding:6px 14px;background:#1a56db;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">下载 PPTX</a></div>`;
-   if(res.study_plan){const sp=res.study_plan;h+=`<p style="font-size:12px;color:#666">${esc(sp.profile_summary||'')}</p>`;(sp.steps||[]).forEach(s=>{h+=`<div class="scard"><div class="n">${s.order||'?'}</div><div><h4>${esc(s.topic||'')}</h4><p>${esc(s.reason||'')} | ${(s.resource_types||[]).join(',')} | ${s.estimated_minutes||'?'}min</p><p>${esc(s.practice||'')}</p></div></div>`});if(sp.recommended_topics)h+=`<div style="font-size:11px;color:#666;margin-top:6px"><b>推荐:</b> ${sp.recommended_topics.join(' → ')}</div>`}
-   h+='</div>'
-  });
-  el('out').innerHTML=h;
-  // Auto-scroll to results
-  el('out').scrollTop=0
- }catch(e){el('out').innerHTML=m('网络错误: '+e.message,'e')}
-}
-async function demo(){
- const steps=['状态','画像','学习路径','思维导图','测验','PPT'];
- el('demoBar').innerHTML=steps.map(s=>`<div class="st" id="ds_${s}">${s}</div>`).join('');
- const mark=(s,v)=>{const e=el('ds_'+s);if(e){e.className='st';if(v==='r'){e.className='st r';e.textContent='⏳ '+s}else if(v==='d'){e.className='st d';e.textContent='✅ '+s}else{e.className='st f';e.textContent='❌ '+s}}};
- el('out').innerHTML='<div class="block"><span class="spin"></span> 全流程演示...</div>';
- let h='';
-
- mark('状态','r');
- try{const r=await api('/api/llm/status');h+=`<div class="block"><h3>状态</h3><pre>${esc(JSON.stringify(r.data,null,2))}</pre></div>`;mark('状态','d')}catch(e){mark('状态','f')}
-
- mark('画像','r');
- try{const r=await api('/api/profiles/me/extract',{method:'POST',body:JSON.stringify({message:'分析学习特征'})});if(r.ok){h+=`<div class="block"><h3>画像</h3><pre>${esc(JSON.stringify(r.data,null,2))}</pre></div>`;mark('画像','d')}else mark('画像','f')}catch(e){mark('画像','f')}
-
- const topic=el('topic').value;
- for(const [s,t] of [['学习路径','study_plan'],['思维导图','mindmap'],['测验','quiz'],['PPT','ppt']]){
-  mark(s,'r');el('out').innerHTML=h+`<div class="block"><span class="spin"></span> ${s}...</div>`;
-  try{
-   const r=await api(`/api/resources/courses/${cid}/generate`,{method:'POST',body:JSON.stringify({topic,resource_types:[t],top_k:8})});
-   if(r.ok&&r.data.resources.length){
-    const res=r.data.resources[0];h+=`<div class="block"><h3>${s}</h3><div class="row">${b(res.generated_by,'ok')}</div>`;
-    if(res.mermaid)h+=`<pre>${esc(res.mermaid.substring(0,200))}</pre>`;
-    if(res.items)h+=`<div>题目: ${res.items.length}</div>`;
-    if(res.download_url)h+=`<a href="${el('apiBase').value.replace(/\/$/,'')}${res.download_url}" target="_blank" style="display:inline-block;padding:6px 14px;background:#1a56db;color:#fff;text-decoration:none;border-radius:4px;font-size:12px">下载 PPTX</a>`;
-    mark(s,'d')
-   }else mark(s,'f')
-  }catch(e){mark(s,'f')}
- }
- el('out').innerHTML=h+m('全流程结束','ok')
-}
-
-el('courseId').addEventListener('input',()=>{cid=el('courseId').value});
-listCourses();
-</script>
+<script src="app.js"></script>
 </body>
 </html>
