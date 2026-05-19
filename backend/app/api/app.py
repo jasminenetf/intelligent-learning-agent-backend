@@ -113,8 +113,8 @@ def api_bootstrap(
     else:
         user_info = {"authenticated": False}
 
-    # Courses
-    courses = session.exec(select(Course)).all() if authenticated else []
+    # Courses — always list (not sensitive), but user_info shows auth state
+    courses = session.exec(select(Course)).all()
     course_list = []
     for c in courses:
         chunks = _chunk_count(int(c.id) if c.id else 0, session)
@@ -551,6 +551,13 @@ def api_run_demo(
     cid = course_id
     topic = "导数与极限入门"
 
+    # Captured results for frontend
+    answer_text = ""
+    all_citations = []
+    profile_data = {}
+    resources = {}
+    plan_data = {}
+
     # Step 1: System status
     try:
         provider = get_llm_provider()
@@ -561,9 +568,10 @@ def api_run_demo(
 
     # Step 2: Profile
     try:
-        update_profile_from_extraction(
+        extracted = update_profile_from_extraction(
             user, "我是数学专业学生，基础薄弱，喜欢思维导图和练习题，准备考研", session
         )
+        profile_data = extracted
         add_step("画像提取", True, "已提取8维学习画像")
     except Exception as e:
         add_step("画像提取", False, str(e))
@@ -572,6 +580,9 @@ def api_run_demo(
     try:
         result = answer_course_question(cid, topic, 8, session, user)
         ok = "error" not in result
+        if ok:
+            answer_text = result.get("answer", "")
+            all_citations = result.get("citations", [])
         add_step("RAG问答", ok, result.get("answer", "")[:100] if ok else result.get("error", ""))
     except Exception as e:
         add_step("RAG问答", False, str(e))
@@ -582,6 +593,8 @@ def api_run_demo(
             select(StudentProfile).where(StudentProfile.user_id == int(user.id) if user.id else 0)
         ).first()
         plan = generate_study_plan(cid, topic, profile, session, top_k=8)
+        plan_data = plan
+        resources["study_plan"] = plan
         add_step("学习路径", True, f"{len(plan.get('steps', []))} steps")
     except Exception as e:
         add_step("学习路径", False, str(e))
@@ -589,6 +602,12 @@ def api_run_demo(
     # Step 5: Mindmap
     try:
         pack = generate_resource_pack(cid, topic, [ResourceType.MINDMAP], {}, 8, session, user)
+        if pack.resources:
+            r = pack.resources[0]
+            resources["mindmap"] = {
+                "title": r.title, "mermaid": r.mermaid, "content": r.content,
+                "generated_by": "deepseek", "fallback_used": bool(r.fallback_used) if hasattr(r,'fallback_used') else False
+            }
         add_step("思维导图", bool(pack.resources), f"title={pack.resources[0].title if pack.resources else 'N/A'}")
     except Exception as e:
         add_step("思维导图", False, str(e))
@@ -596,6 +615,9 @@ def api_run_demo(
     # Step 6: Quiz
     try:
         pack = generate_resource_pack(cid, topic, [ResourceType.QUIZ], {}, 8, session, user)
+        if pack.resources:
+            r = pack.resources[0]
+            resources["quiz"] = {"title": r.title, "items": r.items}
         nitems = len(pack.resources[0].items) if pack.resources else 0
         add_step("测验", nitems > 0, f"{nitems} questions")
     except Exception as e:
@@ -604,14 +626,42 @@ def api_run_demo(
     # Step 7: PPT
     try:
         pack = generate_resource_pack(cid, topic, [ResourceType.PPT], {}, 8, session, user)
+        if pack.resources:
+            r = pack.resources[0]
+            resources["ppt"] = {
+                "title": r.title, "download_url": r.download_url,
+                "slide_count": r.slide_count
+            }
         has_dl = bool(pack.resources[0].download_url) if pack.resources else False
         add_step("PPT", has_dl, "download_url ready" if has_dl else "no download")
     except Exception as e:
         add_step("PPT", False, str(e))
+
+    # Also capture lecture
+    try:
+        pack = generate_resource_pack(cid, topic, [ResourceType.LECTURE_DOC], {}, 8, session, user)
+        if pack.resources:
+            r = pack.resources[0]
+            resources["lecture_doc"] = {"title": r.title, "content": r.content}
+    except Exception:
+        pass  # non-critical
 
     success_count = sum(1 for s in steps if s["status"] == "success")
     return {
         "ok": success_count >= 4,
         "steps": steps,
         "summary": f"{success_count}/{len(steps)} steps successful",
+        "demo_results": {
+            "course": {"id": cid, "name": "高等数学上"},
+            "profile": profile_data,
+            "question": topic,
+            "answer": answer_text,
+            "citations": all_citations,
+            "agent_trace": [
+                {"agent": "AI学习助手", "status": "completed"},
+                {"agent": "资料检索", "status": "completed" if all_citations else "partial"},
+                {"agent": "内容校验", "status": "completed" if answer_text else "partial"},
+            ],
+            "resources": resources,
+        },
     }

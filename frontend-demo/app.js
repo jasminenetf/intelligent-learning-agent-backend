@@ -1,1022 +1,389 @@
 /**
- * 智学・多智能体 — 学习工作台 Application Logic
- * Uses /api/app bootstrap aggregation API instead of scattered low-level APIs.
+ * 智学·多智能体 — 学习工作台 Application Logic v2
+ * R1.4: P0 fixes — prefilled artifacts, demo results, term replacements
  */
 (function(){
 'use strict';
 
-// ── State ────────────────────────────────────────────────────────
 const S = {
   apiBase: 'http://127.0.0.1:8000',
   token: localStorage.getItem('hermes_token') || '',
-  user: null,
-  courseId: 2,
-  courseName: '高等数学',
-  courses: [],
-  profile: null,
-  sidebarCollapsed: false,
-  kbReady: false,
-  kbChunks: 0,
-  demoRunning: false,
+  user: null, courseId: 2, courseName: '高等数学上',
+  courses: [], profile: null, sidebarCollapsed: false,
+  kbReady: false, kbChunks: 16,
+  demoResults: null, genCache: {}
 };
 
-// ── DOM helpers ──────────────────────────────────────────────────
-const $ = (sel, ctx) => (ctx||document).querySelector(sel);
-const $$ = (sel, ctx) => (ctx||document).querySelectorAll(sel);
-const on = (el, ev, fn) => el.addEventListener(ev, fn);
+const $ = (s,c) => (c||document).querySelector(s);
+const $$ = (s,c) => (c||document).querySelectorAll(s);
+const on = (el,ev,fn) => el.addEventListener(ev,fn);
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-// ── API ──────────────────────────────────────────────────────────
 async function api(path, opts={}) {
-  const base = S.apiBase.replace(/\/$/,'');
-  const headers = {'Content-Type':'application/json'};
-  if (S.token) headers['Authorization'] = 'Bearer ' + S.token;
-  const res = await fetch(base + path, {...opts, headers});
-  const data = await res.json().catch(() => ({}));
-  return {ok: res.ok, status: res.status, data};
+  const h = {'Content-Type':'application/json'};
+  if (S.token) h['Authorization'] = 'Bearer ' + S.token;
+  const res = await fetch(S.apiBase.replace(/\/$/,'') + path, {...opts, headers:h});
+  const data = await res.json().catch(()=>({}));
+  return {ok:res.ok, status:res.status, data};
 }
 
-function setToken(t) {
-  S.token = t;
-  if (t) localStorage.setItem('hermes_token', t);
-  else localStorage.removeItem('hermes_token');
-  updateTopbar();
-}
+function setToken(t){S.token=t;if(t)localStorage.setItem('hermes_token',t);else localStorage.removeItem('hermes_token');updateTopbar();}
 
-// ── Toast ────────────────────────────────────────────────────────
 let toastTimer;
-function toast(msg, type='info') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'toast ' + type;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = 'toast'; el.style.display='none'; }, 3500);
-  el.style.display = 'block';
+function toast(msg, type='info'){
+  const el=document.getElementById('toast');el.textContent=msg;el.className='toast '+type;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{el.style.display='none'},4000);el.style.display='block';
 }
 
-// ── Navigation ───────────────────────────────────────────────────
-function navTo(pageId) {
-  $$('.page').forEach(p => p.classList.remove('active'));
-  const page = document.getElementById('page-'+pageId);
-  if (page) page.classList.add('active');
-
-  $$('.nav-item').forEach(n => n.classList.remove('active'));
-  const navItem = $(`.nav-item[data-page="${pageId}"]`);
-  if (navItem) navItem.classList.add('active');
-
-  // Load page-specific data
-  if (pageId === 'dashboard') loadDashboard();
-  if (pageId === 'assistant') initAssistant();
-  if (pageId === 'generator') initGenerator();
-  if (pageId === 'courses') loadCourses();
-  if (pageId === 'knowledge') loadKnowledgeBase();
-  if (pageId === 'learning-path') loadLearningPath();
-  if (pageId === 'settings') loadSettings();
+function navTo(id){
+  $$('.page').forEach(p=>p.classList.remove('active'));
+  const pg=document.getElementById('page-'+id);if(pg)pg.classList.add('active');
+  $$('.nav-item').forEach(n=>n.classList.remove('active'));
+  const ni=$('.nav-item[data-page="'+id+'"]');if(ni)ni.classList.add('active');
+  if(id==='assistant')initAssistant();
+  if(id==='generator')initGenerator();
+  if(id==='courses')loadCourses();
+  if(id==='knowledge')loadKnowledgeBase();
+  if(id==='learning-path')loadLearningPath();
+  if(id==='settings')loadSettings();
+  if(id==='dashboard')loadDashboard();
 }
 
-// ── Topbar ───────────────────────────────────────────────────────
-function updateTopbar() {
-  const userSpan = $('#topbar-user');
-  const courseSpan = $('#topbar-course');
-  const badgeEl = $('#topbar-badge');
-
-  if (S.user) {
-    userSpan.innerHTML = `<span class="topbar-avatar">${(S.user.username||'?')[0].toUpperCase()}</span><span>${S.user.username||''}</span>`;
-    userSpan.style.display = 'flex';
-  } else {
-    userSpan.innerHTML = '<button class="btn btn-sm btn-primary" onclick="window._loginDemo()">演示账号登录</button>';
-    userSpan.style.display = 'flex';
-  }
-
-  courseSpan.textContent = S.courseName || '未选择课程';
-
-  if (S.kbReady && S.token) {
-    badgeEl.className = 'topbar-badge ok';
-    badgeEl.textContent = 'Agentic RAG 已连接';
-  } else if (S.token) {
-    badgeEl.className = 'topbar-badge warn';
-    badgeEl.textContent = '知识库未就绪';
-  } else {
-    badgeEl.className = 'topbar-badge err';
-    badgeEl.textContent = '未登录';
-  }
-
-  // Sidebar footer
-  const sf = $('#sidebar-footer');
-  if (S.token) {
-    sf.innerHTML = '<span class="status-dot online"></span> API 正常';
-  } else {
-    sf.innerHTML = '<span class="status-dot offline"></span> 未连接';
-  }
+function updateTopbar(){
+  const u=$('#topbar-user'),c=$('#topbar-course'),b=$('#topbar-badge'),sf=$('#sidebar-footer'),lo=$('#btn-logout');
+  if(S.user){u.innerHTML='<span class="topbar-avatar">'+(S.user.username||'?')[0].toUpperCase()+'</span><span>'+esc(S.user.username||'')+'</span>';u.style.display='flex';if(lo)lo.style.display='inline-flex';}
+  else{u.innerHTML='<button class="btn btn-sm btn-primary" onclick="_loginDemo()">演示登录</button>';u.style.display='flex';if(lo)lo.style.display='none';}
+  if(c)c.textContent=S.courseName||'未选择';
+  if(b){b.className='topbar-badge '+(S.kbReady?'ok':'warn');b.textContent=S.kbReady?'知识库已就绪':'课程资料不足';}
+  if(sf)sf.innerHTML=S.token?'<span class="status-dot online"></span> API 正常':'<span class="status-dot offline"></span> 未连接';
 }
 
-// ── Sidebar toggle ───────────────────────────────────────────────
-window._toggleSidebar = function() {
-  S.sidebarCollapsed = !S.sidebarCollapsed;
-  const sb = document.getElementById('sidebar');
-  if (S.sidebarCollapsed) sb.classList.add('collapsed');
-  else sb.classList.remove('collapsed');
-};
+window._toggleSidebar=function(){S.sidebarCollapsed=!S.sidebarCollapsed;const sb=document.getElementById('sidebar');sb.classList.toggle('collapsed',S.sidebarCollapsed);};
 
-// ── Bootstrap ────────────────────────────────────────────────────
-async function initApp() {
-  try {
-    const {ok, data} = await api('/api/app/bootstrap');
-    if (!ok) return;
-
-    S.courses = data.courses || [];
-    if (data.selected_course && data.selected_course.id) {
-      S.courseId = data.selected_course.id;
-      S.courseName = data.selected_course.name || '未选择';
-    }
-
-    if (data.user && data.user.authenticated) {
-      S.user = data.user;
-      S.profile = data.profile_exists || false;
-    }
-
-    if (!S.token && S.user) {
-      // Need to login
-      await initDemo();
-    }
-
-    if (data.next_step === 'configure_key') {
-      navTo('settings');
-      toast('请先配置 DeepSeek API Key', 'info');
-    } else if (data.next_step === 'login') {
-      await initDemo();
-      navTo('dashboard');
-    } else if (data.next_step === 'create_course') {
-      navTo('courses');
-      toast('请创建或选择课程', 'info');
-    } else if (!S.token) {
-      await initDemo();
-      navTo('dashboard');
-    } else {
-      navTo('dashboard');
-    }
-
+// ════════════ BOOTSTRAP ════════════
+async function initApp(){
+  try{
+    const{ok,data}=await api('/api/app/bootstrap');
+    if(!ok)return;
+    S.courses=data.courses||[];
+    if(data.selected_course&&data.selected_course.id){S.courseId=data.selected_course.id;S.courseName=data.selected_course.name||'未选择';S.kbChunks=data.selected_course.chunks_count||0;S.kbReady=data.selected_course.has_knowledge_base||false;}
+    if(data.user&&data.user.authenticated)S.user=data.user;
+    if(!S.token)await initDemo();
+    if(data.next_step==='configure_key'){navTo('settings');toast('请先配置 API Key','info');}
+    else if(data.next_step==='login'){await initDemo();navTo('assistant');}
+    else if(data.next_step==='create_course'){navTo('courses');toast('请创建课程','info');}
+    else if(!S.token){await initDemo();navTo('assistant');}
+    else{navTo('assistant');}
     updateTopbar();
-  } catch(e) {
-    console.error('Bootstrap failed:', e);
-    navTo('settings');
-    toast('无法连接后端，请确认服务已启动', 'error');
-  }
+  }catch(e){console.warn('Bootstrap:',e.message);navTo('settings');toast('无法连接后端','error');}
 }
 
-// ── Demo init ────────────────────────────────────────────────────
-async function initDemo() {
-  try {
-    const {ok, data} = await api('/api/app/demo-init', {method:'POST'});
-    if (ok && data.token) {
-      setToken(data.token);
-      S.user = data.user;
-      S.courseId = data.course ? data.course.id : 2;
-      S.courseName = data.course ? data.course.name : '高等数学';
-      S.kbReady = data.course ? data.course.has_knowledge_base : false;
-      S.kbChunks = data.course ? data.course.chunks_count : 0;
-      // Refresh courses list after auth
-      try {
-        const {ok:ok2, data:d2} = await api('/api/app/bootstrap');
-        if (ok2 && d2.courses) S.courses = d2.courses;
-      } catch(e) { /* non-critical */ }
-      // Also cache course from demo-init as fallback
-      if (data.course && data.course.id && (!S.courses || S.courses.length === 0)) {
-        S.courses = [{
-          id: data.course.id,
-          name: data.course.name,
-          chunks_count: data.course.chunks_count || 0,
-          has_knowledge_base: data.course.has_knowledge_base || false,
-        }];
-      }
+async function initDemo(){
+  try{
+    const{ok,data}=await api('/api/app/demo-init',{method:'POST'});
+    if(ok&&data.token){setToken(data.token);S.user=data.user;S.courseId=data.course?data.course.id:2;S.courseName=data.course?data.course.name:'高等数学上';S.kbReady=data.course?data.course.has_knowledge_base:false;S.kbChunks=data.course?data.course.chunks_count:0;
+      try{const{ok:o2,data:d2}=await api('/api/app/bootstrap');if(o2&&d2.courses)S.courses=d2.courses;}catch(e){}
+      if(data.course&&!S.courses.length)S.courses=[{id:data.course.id,name:data.course.name,chunks_count:data.course.chunks_count||0,has_knowledge_base:data.course.has_knowledge_base||false}];
       updateTopbar();
-      if (data.course && data.course.recommended_for_demo) {
-        toast('演示环境已就绪（课程: '+esc(data.course.name)+', '+data.course.chunks_count+' 知识块）', 'success');
-      } else if (data.message) {
-        toast(data.message, 'info');
-      } else {
-        toast('演示环境已就绪', 'success');
-      }
-      return true;
-    }
+      if(data.course&&data.course.recommended_for_demo)toast('演示就绪（'+esc(data.course.name)+', '+data.course.chunks_count+' 知识点）','success');
+      else if(data.message)toast(data.message,'info');else toast('演示已就绪','success');
+      return true;}
     return false;
-  } catch(e) {
-    console.warn('Demo init failed:', e.message || 'unknown');
-    return false;
-  }
+  }catch(e){console.warn('Demo init:',e.message);return false;}
 }
 
-window._loginDemo = async function() {
-  const ok = await initDemo();
-  if (ok) {
-    navTo('dashboard');
-    loadDashboard();
-  } else {
-    toast('演示初始化失败，请检查后端服务', 'error');
-  }
-};
+window._loginDemo=async function(){if(await initDemo()){navTo('assistant');}};
+window._logout=function(){setToken('');S.user=null;S.profile=null;S.courses=[];S.kbReady=false;S.demoResults=null;updateTopbar();navTo('settings');toast('已退出','info');};
 
-window._logout = function() {
-  setToken('');
-  S.user = null;
-  S.profile = null;
-  S.courses = [];
-  S.kbReady = false;
-  updateTopbar();
-  navTo('settings');
-  toast('已退出登录', 'info');
-};
-
-// ═════════════════════════════════════════════════════════════════
-// PAGE: Dashboard
-// ═════════════════════════════════════════════════════════════════
-async function loadDashboard() {
-  const el = document.getElementById('page-dashboard');
-  el.innerHTML = '<div class="loading-block"><span class="spinner"></span> 加载中...</div>';
-
-  try {
-    const {ok, data} = await api(`/api/app/dashboard?course_id=${S.courseId}`);
-    if (!ok) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败</p></div>'; return; }
-
-    const d = data;
-    const kb = d.knowledge_base || {};
-    const pf = d.profile || {};
-
-    let html = '<div class="grid grid-3">';
-
-    // System status cards
-    html += `<div class="card grid-stat"><div class="val" style="color:var(--success)">✓</div><div class="lbl">LLM: ${(d.course||{}).name||'就绪'}</div></div>`;
-    html += `<div class="card grid-stat"><div class="val">${kb.chunks_count||0}</div><div class="lbl">知识块</div></div>`;
-    html += `<div class="card grid-stat"><div class="val">${pf ? '✓' : '—'}</div><div class="lbl">学生画像</div></div>`;
-    html += '</div>';
-
-    // Course info
-    if (d.course) {
-      html += `<div class="card"><div class="card-header"><h3>当前课程</h3></div>
-        <p style="font-size:15px;font-weight:700">${esc(d.course.name)}</p>
-        <p style="font-size:12px;color:var(--gray-500)">${esc(d.course.description||'')}</p>
-        <div style="display:flex;gap:20px;margin-top:8px;font-size:12px;color:var(--gray-500)">
-          <span>知识块: ${kb.chunks_count||0}</span>
-          <span>向量库: ${kb.vector_ready?'就绪':'未构建'}</span>
-          <span>状态: ${kb.status||'未知'}</span>
-        </div></div>`;
-    }
-
-    // Suggested actions
-    if (d.suggested_actions && d.suggested_actions.length) {
-      html += '<div class="card"><div class="card-header"><h3>建议操作</h3></div>';
-      d.suggested_actions.forEach(a => {
-        html += `<button class="btn btn-outline btn-sm" style="margin:4px" onclick="window._navTo('${a.action==='start_qa'?'assistant':a.action==='configure_key'?'settings':a.action==='upload_materials'?'courses':a.action==='extract_profile'?'assistant':'dashboard'}')">${esc(a.label)}</button>`;
-      });
-      html += '</div>';
-    }
-
-    // Profile mini
-    if (pf && pf.knowledge_level) {
-      html += `<div class="card"><div class="card-header"><h3>学习画像摘要</h3></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
-          <div><b>知识水平:</b> ${esc(pf.knowledge_level||'—')}</div>
-          <div><b>认知风格:</b> ${esc(pf.cognitive_style||'—')}</div>
-          <div><b>学习节奏:</b> ${esc(pf.pace_preference||'—')}</div>
-          <div><b>专业:</b> ${esc(pf.major||'—')}</div>
-        </div></div>`;
-    }
-
-    // Quick actions
-    html += `<div class="card">
-      <div class="card-header"><h3>快捷操作</h3></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="navTo('assistant')">💬 开始学习</button>
-        <button class="btn btn-secondary" onclick="navTo('generator')">⚡ 生成资源</button>
-        <button class="btn btn-outline" onclick="window._runFullDemo()">🎯 一键演示</button>
-      </div></div>`;
-
-    el.innerHTML = html;
-  } catch(e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败: ${esc(e.message)}</p></div>`;
-  }
+// ════════════ PAGE: DASHBOARD ════════════
+async function loadDashboard(){
+  const el=document.getElementById('page-dashboard');
+  el.innerHTML='<div class="loading-block"><span class="spinner"></span> 加载...</div>';
+  try{
+    const{ok,data}=await api('/api/app/dashboard?course_id='+S.courseId);
+    if(!ok){el.innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败</p></div>';return;}
+    const d=data,kb=d.knowledge_base||{},pf=d.profile||{};
+    let h='<div class="grid grid-3">';
+    h+='<div class="card grid-stat"><div class="val" style="color:var(--success)">✓</div><div class="lbl">AI模型已连接</div></div>';
+    h+='<div class="card grid-stat"><div class="val">'+(kb.chunks_count||0)+'</div><div class="lbl">课程知识点</div></div>';
+    h+='<div class="card grid-stat"><div class="val">'+(pf?'✓':'—')+'</div><div class="lbl">学习画像</div></div></div>';
+    if(d.course)h+='<div class="card"><div class="card-header"><h3>当前课程</h3></div><p style="font-size:15px;font-weight:700">'+esc(d.course.name)+'</p><p style="font-size:12px;color:var(--gray-500)">'+esc(d.course.description||'')+'</p><div style="display:flex;gap:20px;margin-top:8px;font-size:12px;color:var(--gray-500)"><span>知识点: '+(kb.chunks_count||0)+'</span><span>知识库索引: '+(kb.vector_ready?'就绪':'未构建')+'</span></div></div>';
+    if(d.suggested_actions&&d.suggested_actions.length){h+='<div class="card"><div class="card-header"><h3>建议操作</h3></div>';d.suggested_actions.forEach(a=>{h+='<button class="btn btn-outline btn-sm" style="margin:4px" onclick="navTo(\''+(a.action==='start_qa'?'assistant':a.action==='configure_key'?'settings':a.action==='upload_materials'?'courses':'dashboard')+'\')">'+esc(a.label)+'</button>';});h+='</div>';}
+    if(pf&&pf.knowledge_level)h+='<div class="card"><div class="card-header"><h3>学习画像</h3></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px"><div><b>知识水平:</b> '+esc(pf.knowledge_level||'—')+'</div><div><b>认知风格:</b> '+esc(pf.cognitive_style||'—')+'</div><div><b>学习节奏:</b> '+esc(pf.pace_preference||'—')+'</div><div><b>专业:</b> '+esc(pf.major||'—')+'</div></div></div>';
+    h+='<div class="card"><div class="card-header"><h3>快捷操作</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="navTo(\'assistant\')">💬 开始学习</button><button class="btn btn-secondary" onclick="navTo(\'generator\')">⚡ 生成资源</button><button class="btn btn-outline" onclick="_runFullDemo()">🎯 一键演示</button></div></div>';
+    el.innerHTML=h;
+  }catch(e){el.innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败: '+esc(e.message)+'</p></div>';}
 }
 
-// ═════════════════════════════════════════════════════════════════
-// PAGE: Learning Assistant
-// ═════════════════════════════════════════════════════════════════
-function initAssistant() {
-  const msgs = $('#chat-messages');
-  if (!msgs) return;
-  if (msgs.children.length === 0) {
-    msgs.innerHTML = `<div class="empty-state" style="padding:60px 20px">
-      <div class="empty-icon">💬</div>
-      <p>向 Tutor Agent 提问</p>
-      <p style="font-size:11px;color:var(--gray-400)">AI 将基于课程知识库回答你的问题</p>
-    </div>`;
+// ════════════ PAGE: LEARNING ASSISTANT (DEFAULT) ════════════
+const DEFAULT_MERMAID = `graph TD
+  A[导数与极限] --> B[导数定义]
+  A --> C[极限基础]
+  B --> D[瞬时变化率]
+  B --> E[切线斜率]
+  B --> F[求导法则]
+  C --> G[极限定义]
+  C --> H[重要极限]
+  C --> I[连续函数]
+  D --> F
+  E --> F`;
+
+const DEFAULT_QUIZ = [{question:'导数本质上是描述函数的什么？',options:['最大值','瞬时变化率','平均值','积分值'],answer:1,explanation:'导数定义为函数增量与自变量增量之比的极限，即瞬时变化率。'},{question:'lim(x→0) sin x / x 的值是？',options:['0','1','无穷大','不存在'],answer:1,explanation:'第一个重要极限：lim(x→0) sin x / x = 1。'}];
+
+const DEFAULT_PLAN = {title:'导数与极限学习路径',profile_summary:'基于当前课程知识库生成的推荐学习顺序',steps:[{order:1,topic:'极限概念入门',reason:'先理解极限是导数的基础',resource_types:['lecture_doc','mindmap'],estimated_minutes:25,practice:'阅读极限定义，完成3道基础题'},{order:2,topic:'导数定义与几何意义',reason:'掌握导数的核心概念',resource_types:['lecture_doc','quiz'],estimated_minutes:30,practice:'画切线理解导数几何意义'},{order:3,topic:'求导法则与应用',reason:'学习基本求导方法',resource_types:['quiz','ppt'],estimated_minutes:35,practice:'完成5道求导练习'}]};
+
+function initAssistant(){
+  const msgs=$('#chat-messages');if(!msgs)return;
+  if(msgs.children.length===0){
+    msgs.innerHTML='<div class="msg-bubble agent"><div class="msg-content"><b>你好！我是你的 AI 学习助手。</b><br><br>我已连接当前课程《'+esc(S.courseName)+'》（'+S.kbChunks+' 个知识点），可以帮你：<br>• 解释概念和答疑<br>• 生成思维导图、测验题、讲义<br>• 规划个性化学习路径<br><br><b>试试问我：</b></div></div>';
+    // Sample questions
+    const qs=['导数和函数变化率有什么关系？','极限为什么是学习导数的基础？','帮我生成导数与极限的复习资料'];
+    let qhtml='<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">';
+    qs.forEach(q=>{qhtml+='<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'chat-input\').value=\''+esc(q)+'\';_sendQuestion()" style="font-size:11px">'+esc(q)+'</button>';});
+    qhtml+='</div>';
+    msgs.innerHTML+=qhtml;
   }
-  // Init artifacts tabs
   renderArtifactTabs();
-  // Init citations panel
-  $('#citations-panel').innerHTML = `<h4>📚 文献溯源</h4><p style="font-size:12px;color:var(--gray-400)">提问后显示引用来源</p>`;
-  // Profile mini
-  if (S.profile) {
-    renderProfileMini();
+  // Default artifact content
+  fillDefaultArtifacts();
+  // Citations
+  const cp=$('#citations-panel');
+  if(cp&&cp.textContent.includes('提问后'))cp.innerHTML='<h4>📚 文献溯源</h4><p style="font-size:12px;color:var(--gray-400)">RAG 知识库回答将显示引用来源</p><div style="margin-top:12px;padding:8px;background:var(--gray-50);border-radius:6px;font-size:11px;color:var(--gray-500)">当前课程资料: '+S.kbChunks+' 个知识点，语义检索已就绪</div>';
+  // Agent viz
+  $('#agent-viz').innerHTML='<h4>🤖 多智能体协作</h4><div style="font-size:11px;display:flex;flex-direction:column;gap:4px"><div style="padding:4px 8px;background:var(--success-bg);border-radius:4px">✅ AI 学习助手</div><div style="padding:4px 8px;background:var(--success-bg);border-radius:4px">✅ 资料检索</div><div style="padding:4px 8px;background:var(--gray-100);border-radius:4px">⏳ 内容校验（提问后激活）</div></div>';
+  // Profile
+  try{api('/api/profiles/me').then(({ok,data})=>{if(ok)renderProfileMini(data);});}catch(e){}
+}
+
+function fillDefaultArtifacts(){
+  // Mindmap
+  const am=$('#artifact-mindmap');
+  if(am&&(am.querySelector('.empty-state')||!am.textContent.trim())){
+    am.innerHTML='<div class="mermaid-wrap"><div class="mermaid">'+DEFAULT_MERMAID+'</div><pre style="margin-top:8px;max-height:120px;overflow:auto;font-size:10px;color:var(--gray-400)">'+esc(DEFAULT_MERMAID)+'</pre><p style="font-size:10px;color:var(--gray-400);margin-top:4px">📌 示例导图 · 生成后将替换为 AI 个性化版本</p></div>';
+    setTimeout(()=>{try{const el=am.querySelector('.mermaid');if(el&&el.textContent.trim())mermaid.run({nodes:[el]});}catch(e){}},200);
+  }
+  // Quiz
+  const aq=$('#artifact-quiz');
+  if(aq&&(!aq.textContent.trim()||aq.querySelector('.empty-state'))){
+    aq.innerHTML=DEFAULT_QUIZ.map((it,i)=>'<div class="quiz-item"><div class="q-text">Q'+(i+1)+'. '+esc(it.question)+'</div>'+it.options.map((o,j)=>'<div class="q-option'+(j===it.answer?' correct':'')+'">'+String.fromCharCode(65+j)+'. '+esc(o)+(j===it.answer?' ✓':'')+'</div>').join('')+'<div class="q-explain">💡 '+esc(it.explanation||'')+'</div></div>').join('')+'<p style="font-size:10px;color:var(--gray-400);margin-top:4px">📌 示例题目 · 生成后替换为个性化测验</p>';
+  }
+  // Lecture
+  const al=$('#artifact-lecture');
+  if(al&&(!al.textContent.trim()||al.querySelector('.empty-state'))){
+    al.innerHTML='<div style="padding:8px"><h4 style="font-size:13px">📖 讲义结构预览</h4><div style="font-size:12px;color:var(--gray-500);line-height:2">1. 学习目标<br>2. 核心概念讲解<br>3. 例题分析<br>4. 常见误区<br>5. 小结与练习建议</div><p style="font-size:10px;color:var(--gray-400);margin-top:8px">📌 生成后将填充完整 AI 讲义</p></div>';
+  }
+  // PPT
+  const ap=$('#artifact-ppt');
+  if(ap&&(!ap.textContent.trim()||ap.querySelector('.empty-state'))){
+    ap.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:8px">📊</div><p style="font-size:13px;font-weight:600">PowerPoint 课件</p><p style="font-size:11px;color:var(--gray-500)">生成后可下载 .pptx 格式课件</p><button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="_quickGenerate(\'ppt\')">生成 PPT</button></div>';
+  }
+  // Study Plan
+  const as=$('#artifact-study_plan');
+  if(as&&(!as.textContent.trim()||as.querySelector('.empty-state'))){
+    as.innerHTML='<p style="font-size:11px;color:var(--gray-500);margin-bottom:8px">📌 '+esc(DEFAULT_PLAN.profile_summary)+'</p>'+(DEFAULT_PLAN.steps||[]).map(s=>'<div class="step-card"><div class="step-num">'+(s.order||'?')+'</div><div class="step-info"><h4>'+esc(s.topic||'')+'</h4><p>'+esc(s.reason||'')+' | '+(s.resource_types||[]).join(',')+' | '+(s.estimated_minutes||'?')+' 分钟</p></div></div>').join('')+'<p style="font-size:10px;color:var(--gray-400);margin-top:4px">📌 点击生成替换为个性化学习路径</p>';
   }
 }
 
-window._sendQuestion = async function() {
-  const input = document.getElementById('chat-input');
-  const q = input.value.trim();
-  if (!q) return;
-  if (!S.token) { toast('请先登录','error'); return; }
-
-  const msgs = $('#chat-messages');
-
-  // Add user message
-  msgs.innerHTML += `<div class="msg-bubble user"><div class="msg-content">${esc(q)}</div></div>`;
-  input.value = '';
-
-  // Add loading
-  const loadId = 'load_' + Date.now();
-  msgs.innerHTML += `<div class="msg-bubble agent" id="${loadId}"><div class="msg-content"><span class="spinner"></span> Tutor Agent 思考中...</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-
-  try {
-    const {ok, data} = await api('/api/app/ask', {
-      method:'POST',
-      body: JSON.stringify({course_id: S.courseId, question: q, top_k: 8})
-    });
-
-    const loadEl = document.getElementById(loadId);
-    if (loadEl) loadEl.remove();
-
-    if (ok) {
-      let html = `<div class="msg-content">${formatAnswer(data.answer)}</div>`;
-      if (data.citations && data.citations.length) {
-        html += '<div class="msg-citations">📚 引用: ';
-        const seen = new Set();
-        data.citations.forEach(c => {
-          const s = c.source || 'unknown';
-          if (!seen.has(s)) { seen.add(s); html += `<span style="margin-right:8px">📄 ${esc(s)}</span>`; }
-        });
-        html += '</div>';
-        // Update citations panel
-        renderCitations(data.citations);
-      }
-      msgs.innerHTML += `<div class="msg-bubble agent">${html}</div>`;
-    } else {
-      msgs.innerHTML += `<div class="msg-bubble agent"><div class="msg-content" style="color:var(--danger)">❌ ${esc(data.detail||'请求失败')}</div></div>`;
-    }
-  } catch(e) {
-    const loadEl = document.getElementById(loadId);
-    if (loadEl) loadEl.remove();
-    msgs.innerHTML += `<div class="msg-bubble agent"><div class="msg-content" style="color:var(--danger)">❌ 网络错误: ${esc(e.message)}</div></div>`;
-  }
-
-  msgs.scrollTop = msgs.scrollHeight;
+window._sendQuestion=async function(){
+  const input=document.getElementById('chat-input');const q=input.value.trim();if(!q)return;if(!S.token){toast('请先登录','error');return;}
+  const msgs=$('#chat-messages');msgs.innerHTML+='<div class="msg-bubble user"><div class="msg-content">'+esc(q)+'</div></div>';input.value='';
+  const lid='load_'+Date.now();msgs.innerHTML+='<div class="msg-bubble agent" id="'+lid+'"><div class="msg-content"><span class="spinner"></span> AI 学习助手思考中...</div></div>';msgs.scrollTop=msgs.scrollHeight;
+  try{
+    const{ok,data}=await api('/api/app/ask',{method:'POST',body:JSON.stringify({course_id:S.courseId,question:q,top_k:8})});
+    const le=document.getElementById(lid);if(le)le.remove();
+    if(ok){
+      let html='<div class="msg-content">'+fmtAns(data.answer)+'</div>';
+      if(data.citations&&data.citations.length){html+='<div class="msg-citations">📚 引用: ';const seen=new Set();data.citations.forEach(c=>{const s=c.source||'unknown';if(!seen.has(s)){seen.add(s);html+='<span style="margin-right:8px">📄 '+esc(s)+'</span>';}});html+='</div>';renderCitations(data.citations);}
+      msgs.innerHTML+=html;
+      // Update agent viz
+      $('#agent-viz').innerHTML='<h4>🤖 多智能体协作</h4><div style="font-size:11px;display:flex;flex-direction:column;gap:4px"><div style="padding:4px 8px;background:var(--success-bg);border-radius:4px">✅ AI 学习助手</div><div style="padding:4px 8px;background:var(--success-bg);border-radius:4px">✅ 资料检索（'+data.citations.length+' 条）</div><div style="padding:4px 8px;background:var(--success-bg);border-radius:4px">✅ 内容校验</div></div>';
+    }else{msgs.innerHTML+='<div class="msg-bubble agent"><div class="msg-content" style="color:var(--danger)">❌ '+esc(data.detail||'请求失败')+'</div></div>';}
+  }catch(e){const le=document.getElementById(lid);if(le)le.remove();msgs.innerHTML+='<div class="msg-bubble agent"><div class="msg-content" style="color:var(--danger)">❌ 网络错误</div></div>';}
+  msgs.scrollTop=msgs.scrollHeight;
 };
 
-window._quickGenerate = async function(type) {
-  if (!S.token) { toast('请先登录','error'); return; }
-  const topic = document.getElementById('chat-input').value.trim() || '导数与极限入门';
-  toast(`正在生成${type}...`, 'info');
-  try {
-    const {ok, data} = await api('/api/app/generate', {
-      method:'POST',
-      body: JSON.stringify({course_id: S.courseId, resource_type: type, topic})
-    });
-    if (ok) {
-      renderArtifact(type, data);
-      toast(`${type} 生成完成`, 'success');
-    } else {
-      toast(`生成失败: ${data.detail||'未知错误'}`, 'error');
-    }
-  } catch(e) {
-    toast(`生成失败: ${e.message}`, 'error');
-  }
+window._quickGenerate=async function(type){
+  if(!S.token){toast('请先登录','error');return;}
+  const topic=document.getElementById('chat-input')?.value.trim()||'导数与极限入门';
+  toast('生成中...','info');
+  try{
+    const{ok,data}=await api('/api/app/generate',{method:'POST',body:JSON.stringify({course_id:S.courseId,resource_type:type,topic})});
+    if(ok){renderArtifact(type,data);toast(type+' 完成','success');}else toast('生成失败','error');
+  }catch(e){toast('生成失败','error');}
 };
 
-// ── Artifacts ────────────────────────────────────────────────────
-function renderArtifactTabs() {
-  const tabs = $('#artifacts-tabs');
-  tabs.innerHTML = '';
-  ['mindmap','quiz','lecture','ppt','study_plan'].forEach(t => {
-    const label = {mindmap:'思维导图',quiz:'练习题库',lecture:'讲义文档',ppt:'PPT预览',study_plan:'学习路径'}[t];
-    tabs.innerHTML += `<div class="artifacts-tab" data-tab="${t}" onclick="window._switchArtifactTab('${t}')">${label}</div>`;
-  });
-  // Default active
-  const first = $('.artifacts-tab', tabs);
-  if (first) first.classList.add('active');
-  const firstPanel = $(`#artifact-${first?first.dataset.tab:'mindmap'}`);
-  if (firstPanel) firstPanel.classList.add('active');
+function renderArtifactTabs(){
+  const tabs=$('#artifacts-tabs');if(!tabs)return;
+  tabs.innerHTML='';['mindmap','quiz','lecture','ppt','study_plan'].forEach(t=>{const l={mindmap:'思维导图',quiz:'练习题库',lecture:'讲义文档',ppt:'PPT预览',study_plan:'学习路径'}[t];tabs.innerHTML+='<div class="artifacts-tab" data-tab="'+t+'" onclick="_switchArtifactTab(\''+t+'\')">'+l+'</div>';});
+  const first=$('.artifacts-tab',tabs);if(first)first.classList.add('active');
 }
 
-window._switchArtifactTab = function(tab) {
-  $$('.artifacts-tab').forEach(t => t.classList.remove('active'));
-  $$('.artifacts-tab').forEach(t => { if (t.dataset.tab === tab) t.classList.add('active'); });
-  $$('#artifacts-content .tab-panel').forEach(p => p.classList.remove('active'));
-  const panel = document.getElementById('artifact-'+tab);
-  if (panel) panel.classList.add('active');
+window._switchArtifactTab=function(tab){
+  $$('.artifacts-tab').forEach(t=>t.classList.remove('active'));
+  $$('.artifacts-tab').forEach(t=>{if(t.dataset.tab===tab)t.classList.add('active');});
+  $$('#artifacts-content .tab-panel').forEach(p=>p.classList.remove('active'));
+  const panel=document.getElementById('artifact-'+tab);if(panel)panel.classList.add('active');
 };
 
-function renderArtifact(type, data) {
-  const panel = document.getElementById('artifact-'+type);
-  if (!panel) return;
-
-  if (type === 'mindmap' && data.mermaid) {
-    panel.innerHTML = `<div class="mermaid-wrap"><div class="mermaid">${data.mermaid}</div><pre style="margin-top:8px;max-height:150px;overflow:auto">${esc(data.mermaid)}</pre></div>`;
-    setTimeout(() => {
-      try {
-        const el = panel.querySelector('.mermaid');
-        if (el && el.textContent.trim()) mermaid.run({nodes: [el]});
-      } catch(e) { /* mermaid render failure is non-critical */ }
-    }, 100);
-  } else if (type === 'quiz' && data.items) {
-    let html = '';
-    data.items.forEach((it, i) => {
-      html += `<div class="quiz-item"><div class="q-text">Q${i+1}. ${esc(it.question)}</div>`;
-      it.options.forEach((o, j) => {
-        html += `<div class="q-option${j===it.answer?' correct':''}">${String.fromCharCode(65+j)}. ${esc(o)}${j===it.answer?' ✓':''}</div>`;
-      });
-      if (it.explanation) html += `<div class="q-explain">💡 ${esc(it.explanation)}</div>`;
-      html += '</div>';
-    });
-    panel.innerHTML = html;
-  } else if (type === 'lecture' && data.content) {
-    panel.innerHTML = `<div style="white-space:pre-wrap;font-size:13px;line-height:1.8">${formatAnswer(data.content)}</div>`;
-  } else if (type === 'ppt' && data.download_url) {
-    panel.innerHTML = `<div style="text-align:center;padding:30px">
-      <div style="font-size:48px;margin-bottom:12px">📊</div>
-      <p style="font-size:14px;font-weight:600">${esc(data.title||'PPT课件')}</p>
-      <p style="font-size:12px;color:var(--gray-500)">${data.slide_count||'?'} 页</p>
-      <a href="${S.apiBase}${data.download_url}" target="_blank" class="btn btn-primary" style="margin-top:12px">📥 下载 PPTX</a>
-    </div>`;
-  } else if (type === 'study_plan' && data.study_plan) {
-    const sp = data.study_plan;
-    let html = `<p style="font-size:12px;color:var(--gray-500);margin-bottom:8px">${esc(sp.profile_summary||'')}</p>`;
-    (sp.steps||[]).forEach(s => {
-      html += `<div class="step-card"><div class="step-num">${s.order||'?'}</div><div class="step-info"><h4>${esc(s.topic||'')}</h4><p>${esc(s.reason||'')} | ${(s.resource_types||[]).join(', ')} | ${s.estimated_minutes||'?'}min</p><p>${esc(s.practice||'')}</p></div></div>`;
-    });
-    panel.innerHTML = html;
-  } else {
-    panel.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><p>尚未生成${type}资源</p><p style="font-size:11px;color:var(--gray-400)">在聊天中输入问题或点击快捷按钮生成</p></div>`;
-  }
-
-  window._switchArtifactTab(type);
+function renderArtifact(type,data){
+  const panel=document.getElementById('artifact-'+type);if(!panel)return;
+  if(type==='mindmap'&&data.mermaid){
+    panel.innerHTML='<div class="mermaid-wrap"><div class="mermaid">'+data.mermaid+'</div><pre style="margin-top:8px;max-height:120px;overflow:auto;font-size:10px;color:var(--gray-400)">'+esc(data.mermaid)+'</pre></div>';
+    setTimeout(()=>{try{const el=panel.querySelector('.mermaid');if(el&&el.textContent.trim())mermaid.run({nodes:[el]});}catch(e){}},200);
+  }else if(type==='quiz'&&data.items){
+    panel.innerHTML=data.items.map((it,i)=>'<div class="quiz-item"><div class="q-text">Q'+(i+1)+'. '+esc(it.question)+'</div>'+it.options.map((o,j)=>'<div class="q-option'+(j===it.answer?' correct':'')+'">'+String.fromCharCode(65+j)+'. '+esc(o)+(j===it.answer?' ✓':'')+'</div>').join('')+'<div class="q-explain">💡 '+esc(it.explanation||'')+'</div></div>').join('');
+  }else if(type==='lecture'&&data.content)panel.innerHTML='<div style="white-space:pre-wrap;font-size:13px;line-height:1.8">'+fmtAns(data.content)+'</div>';
+  else if(type==='ppt'&&data.download_url)panel.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:48px">📊</div><p style="font-weight:600">'+esc(data.title||'PPT')+'</p><p style="font-size:12px;color:var(--gray-500)">'+(data.slide_count||'?')+' 页</p><a href="'+S.apiBase+data.download_url+'" target="_blank" class="btn btn-primary" style="margin-top:8px">📥 下载 PPTX</a></div>';
+  else if(type==='study_plan'&&data.study_plan){const sp=data.study_plan;panel.innerHTML='<p style="font-size:11px;color:var(--gray-500);margin-bottom:8px">'+esc(sp.profile_summary||'')+'</p>'+(sp.steps||[]).map(s=>'<div class="step-card"><div class="step-num">'+(s.order||'?')+'</div><div class="step-info"><h4>'+esc(s.topic||'')+'</h4><p>'+esc(s.reason||'')+' | '+(s.resource_types||[]).join(',')+' | '+(s.estimated_minutes||'?')+' 分钟</p></div></div>').join('');}
+  else if(data.content){panel.innerHTML='<pre style="max-height:400px;overflow:auto;font-size:12px;white-space:pre-wrap">'+esc(JSON.stringify(data,null,2))+'</pre>';}
+  _switchArtifactTab(type);
 }
 
-function renderCitations(citations) {
-  if (!citations || !citations.length) return;
-  const panel = $('#citations-panel');
-  let html = '<h4>📚 文献溯源</h4>';
-  const seen = new Set();
-  citations.forEach(c => {
-    const key = c.source || 'unknown';
-    if (seen.has(key)) return;
-    seen.add(key);
-    html += `<div class="cite-item"><div class="cite-src">${esc(key)}</div>
-      ${c.page_number ? `<div class="cite-page">页 ${c.page_number}</div>` : ''}
-      ${c.score ? `<div class="cite-page">相关度: ${(c.score*100).toFixed(0)}%</div>` : ''}
-    </div>`;
-  });
-  panel.innerHTML = html;
+function renderCitations(cits){if(!cits||!cits.length)return;const panel=$('#citations-panel');let h='<h4>📚 文献溯源</h4>';const seen=new Set();cits.forEach(c=>{const k=c.source||'unknown';if(seen.has(k))return;seen.add(k);h+='<div class="cite-item"><div class="cite-src">'+esc(k)+'</div>'+(c.page_number?'<div class="cite-page">页 '+c.page_number+'</div>':'')+'</div>';});panel.innerHTML=h;}
+
+function renderProfileMini(pf){
+  const panel=$('#profile-mini');if(!panel)return;
+  panel.innerHTML='<h4>🎓 学习画像</h4><div style="font-size:11px;display:grid;grid-template-columns:1fr 1fr;gap:4px"><div>水平: '+esc(pf.knowledge_level||'—')+'</div><div>风格: '+esc(pf.cognitive_style||'—')+'</div><div>节奏: '+esc(pf.pace_preference||'—')+'</div><div>专业: '+esc(pf.major||'—')+'</div></div>';
 }
 
-function renderProfileMini() {
-  // Try to get actual profile
-  api('/api/profiles/me').then(({ok, data}) => {
-    if (!ok) return;
-    const panel = $('#profile-mini');
-    if (!panel) return;
-    let html = '<h4>🎓 学习画像</h4>';
-    html += `<div style="font-size:11px;display:grid;grid-template-columns:1fr 1fr;gap:4px">`;
-    html += `<div>水平: ${esc(data.knowledge_level||'—')}</div>`;
-    html += `<div>风格: ${esc(data.cognitive_style||'—')}</div>`;
-    html += `<div>节奏: ${esc(data.pace_preference||'—')}</div>`;
-    html += `<div>专业: ${esc(data.major||'—')}</div>`;
-    html += '</div>';
-    panel.innerHTML = html;
-  }).catch(() => {});
+// ════════════ PAGE: GENERATOR ════════════
+function initGenerator(){
+  const el=document.getElementById('page-generator');
+  let h='<div class="card"><div class="card-header"><h3>📖 当前章节</h3></div><div class="gen-topic">'+esc(S.courseName)+' — 导数与极限入门</div><div class="gen-tags"><span class="gen-tag">AI 个性化</span><span class="gen-tag">知识库增强</span><span class="gen-tag">多智能体协作</span></div></div>';
+  h+='<div class="card"><div class="card-header"><h3>✏️ 输入学习主题</h3></div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="gen-topic-input" placeholder="输入学习主题..." style="flex:1;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px" value="导数与极限入门"><button class="btn btn-primary" onclick="_genAllResources()">⚡ 生成全部 5 类资源</button></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'gen-topic-input\').value=\'导数定义与几何意义\'">导数定义</button><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'gen-topic-input\').value=\'极限运算法则\'">极限运算法则</button><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'gen-topic-input\').value=\'连续函数性质\'">连续函数</button></div></div>';
+  const resources=[{id:'lecture_doc',icon:'📄',name:'讲义文档',desc:'个性化AI讲义'},{id:'mindmap',icon:'🧠',name:'思维导图',desc:'概念关系可视化'},{id:'quiz',icon:'📝',name:'自适应测验',desc:'知识点自测'},{id:'ppt',icon:'📊',name:'PPT课件',desc:'可下载PPTX'},{id:'study_plan',icon:'🗺️',name:'学习路径',desc:'个性化学习计划'},{id:'video',icon:'🎬',name:'数字人视频',desc:'待开发',beta:true}];
+  h+='<div class="resource-cards">';resources.forEach(r=>{h+='<div class="res-card" id="rcard-'+r.id+'" onclick="'+(r.beta?'':'_genSingle(\''+r.id+'\')')+'"><div class="res-icon">'+r.icon+'</div><div class="res-name">'+r.name+'</div><div class="res-desc">'+r.desc+'</div><span class="res-status ready" id="rstatus-'+r.id+'">'+(r.beta?'待开发':'可生成')+'</span></div>';});h+='</div>';
+  h+='<div class="card" id="gen-progress-card" style="display:none"><div class="card-header"><h3>⚙️ 生成进度</h3></div><div class="progress-steps" id="gen-progress-steps"><div class="progress-step" id="gstep-0">分析画像</div><div class="progress-step" id="gstep-1">检索知识</div><div class="progress-step" id="gstep-2">生成路径</div><div class="progress-step" id="gstep-3">生成导图</div><div class="progress-step" id="gstep-4">生成测验</div><div class="progress-step" id="gstep-5">生成讲义</div><div class="progress-step" id="gstep-6">生成PPT</div></div></div>';
+  h+='<div class="card"><div class="card-header"><h3>📋 生成结果</h3></div><div class="artifacts-tabs" id="gen-result-tabs"><div class="artifacts-tab active" onclick="_switchGenTab(\'mindmap\')">思维导图</div><div class="artifacts-tab" onclick="_switchGenTab(\'lecture\')">讲解文档</div><div class="artifacts-tab" onclick="_switchGenTab(\'ppt\')">PPT预览</div><div class="artifacts-tab" onclick="_switchGenTab(\'quiz\')">练习题</div><div class="artifacts-tab" onclick="_switchGenTab(\'study_plan\')">学习路径</div></div><div id="gen-results" style="padding:16px"><div class="mermaid-wrap"><div class="mermaid">'+DEFAULT_MERMAID+'</div><pre style="margin-top:8px;max-height:100px;overflow:auto;font-size:10px;color:var(--gray-400)">'+esc(DEFAULT_MERMAID.substring(0,300))+'...'+'</pre><p style="font-size:10px;color:var(--gray-400)">📌 示例预览 · 点击上方卡片生成 AI 个性化版本</p></div></div></div>';
+  el.innerHTML=h;
+  S.genCache={};
+  setTimeout(()=>{try{const el2=el.querySelector('.mermaid');if(el2&&el2.textContent.trim())mermaid.run({nodes:[el2]});}catch(e){}},200);
 }
 
-// ═════════════════════════════════════════════════════════════════
-// PAGE: Generator
-// ═════════════════════════════════════════════════════════════════
-function initGenerator() {
-  const el = document.getElementById('page-generator');
-  let html = '';
-
-  // Chapter card
-  html += `<div class="card"><div class="card-header"><h3>📖 当前章节</h3></div>
-    <div class="gen-topic">${esc(S.courseName)} — 导数与极限入门</div>
-    <div class="gen-tags">
-      <span class="gen-tag">视觉偏好</span>
-      <span class="gen-tag">基础薄弱</span>
-      <span class="gen-tag">需要分步讲解</span>
-      <span class="gen-tag">考试导向</span>
-    </div></div>`;
-
-  // Input
-  html += `<div class="card"><div class="card-header"><h3>✏️ 告诉我需要的学习资源</h3></div>
-    <div style="display:flex;gap:8px;margin-bottom:8px">
-      <input id="gen-topic-input" placeholder="输入学习主题..." style="flex:1;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px" value="导数与极限入门">
-      <button class="btn btn-primary" onclick="window._genAllResources()">⚡ 生成资源</button>
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="btn btn-sm btn-outline" onclick="document.getElementById('gen-topic-input').value='导数定义与几何意义'">导数定义</button>
-      <button class="btn btn-sm btn-outline" onclick="document.getElementById('gen-topic-input').value='极限运算法则'">极限运算法则</button>
-      <button class="btn btn-sm btn-outline" onclick="document.getElementById('gen-topic-input').value='连续函数性质'">连续函数</button>
-    </div></div>`;
-
-  // Resource cards
-  const resources = [
-    {id:'lecture_doc',icon:'📄',name:'讲义文档',desc:'个性化AI讲义'},
-    {id:'mindmap',icon:'🧠',name:'思维导图',desc:'概念关系可视化'},
-    {id:'quiz',icon:'📝',name:'自适应测验',desc:'知识点自测'},
-    {id:'ppt',icon:'📊',name:'PPT课件',desc:'可下载PPTX'},
-    {id:'study_plan',icon:'🗺️',name:'学习路径',desc:'个性化学习计划'},
-    {id:'video',icon:'🎬',name:'数字人视频',desc:'待开发',beta:true},
-  ];
-  html += '<div class="resource-cards">';
-  resources.forEach(r => {
-    html += `<div class="res-card" id="rcard-${r.id}" onclick="${r.beta?'':`window._genSingle('${r.id}')`}">
-      <div class="res-icon">${r.icon}</div>
-      <div class="res-name">${r.name}</div>
-      <div class="res-desc">${r.desc}</div>
-      <span class="res-status ready" id="rstatus-${r.id}">${r.beta?'待开发':'可生成'}</span>
-    </div>`;
-  });
-  html += '</div>';
-
-  // Progress
-  html += `<div class="card" id="gen-progress-card" style="display:none">
-    <div class="card-header"><h3>⚙️ 多智能体生成进度</h3></div>
-    <div class="progress-steps" id="gen-progress-steps">
-      <div class="progress-step" id="gstep-profile">分析画像</div>
-      <div class="progress-step" id="gstep-rag">检索知识</div>
-      <div class="progress-step" id="gstep-generate">Tutor协同生成</div>
-      <div class="progress-step" id="gstep-output">输出资源</div>
-    </div></div>`;
-
-  // Result tabs
-  html += `<div class="card"><div class="card-header"><h3>📋 生成结果</h3></div>
-    <div class="artifacts-tabs" id="gen-result-tabs">
-      <div class="artifacts-tab active" onclick="window._switchGenTab('mindmap')">思维导图</div>
-      <div class="artifacts-tab" onclick="window._switchGenTab('lecture')">讲解文档</div>
-      <div class="artifacts-tab" onclick="window._switchGenTab('ppt')">PPT预览</div>
-      <div class="artifacts-tab" onclick="window._switchGenTab('quiz')">练习题</div>
-      <div class="artifacts-tab" onclick="window._switchGenTab('study_plan')">学习路径</div>
-    </div>
-    <div id="gen-results" style="padding:16px"><div class="empty-state"><div class="empty-icon">📭</div><p>点击资源卡片开始生成</p></div></div></div>`;
-
-  el.innerHTML = html;
-  S._genResults = {};
-}
-
-window._switchGenTab = function(tab) {
-  $$('#gen-result-tabs .artifacts-tab').forEach(t => t.classList.remove('active'));
-  $$('#gen-result-tabs .artifacts-tab').forEach(t => { if (t.textContent.includes({mindmap:'思维导图',lecture:'讲解文档',ppt:'PPT预览',quiz:'练习题',study_plan:'学习路径'}[tab]||'')) t.classList.add('active'); });
-  // Show cached result
-  if (S._genResults[tab]) {
-    const el = $('#gen-results');
-    el.innerHTML = formatGenResult(tab, S._genResults[tab]);
-  }
+window._switchGenTab=function(tab){
+  $$('#gen-result-tabs .artifacts-tab').forEach(t=>t.classList.remove('active'));
+  $$('#gen-result-tabs .artifacts-tab').forEach(t=>{const m={mindmap:'思维导图',lecture:'讲解文档',ppt:'PPT预览',quiz:'练习题',study_plan:'学习路径'};if((t.textContent||'').includes(m[tab]||''))t.classList.add('active');});
+  if(S.genCache[tab])$('#gen-results').innerHTML=fmtGenResult(tab,S.genCache[tab]);
 };
 
-window._genSingle = async function(type) {
-  if (!S.token) { toast('请先登录','error'); return; }
-  const topic = document.getElementById('gen-topic-input')?.value || '导数与极限入门';
-  const statusEl = document.getElementById('rstatus-'+type);
-  if (statusEl) { statusEl.className = 'res-status generating'; statusEl.textContent = '生成中...'; }
-
-  // Show progress
-  const pcard = $('#gen-progress-card');
-  if (pcard) pcard.style.display = 'block';
-  ['gstep-profile','gstep-rag','gstep-generate','gstep-output'].forEach((id,i) => {
-    setTimeout(() => {
-      const el = document.getElementById(id);
-      if (el) el.className = 'progress-step active';
-    }, i * 300);
-  });
-
-  try {
-    const {ok, data} = await api('/api/app/generate', {
-      method:'POST',
-      body: JSON.stringify({course_id: S.courseId, resource_type: type, topic})
-    });
-
-    // Mark all progress done
-    ['gstep-profile','gstep-rag','gstep-generate','gstep-output'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.className = 'progress-step done';
-    });
-
-    if (ok) {
-      S._genResults[type] = data;
-      if (statusEl) { statusEl.className = 'res-status ready'; statusEl.textContent = '已完成'; }
-      $('#gen-results').innerHTML = formatGenResult(type, data);
-      toast(`${type} 生成完成`, 'success');
-    } else {
-      if (statusEl) { statusEl.className = 'res-status failed'; statusEl.textContent = '失败'; }
-      toast(`生成失败: ${data.detail||'未知错误'}`, 'error');
-    }
-  } catch(e) {
-    if (statusEl) { statusEl.className = 'res-status failed'; statusEl.textContent = '失败'; }
-    ['gstep-profile','gstep-rag','gstep-generate','gstep-output'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.className = 'progress-step fail';
-    });
-    toast(`生成失败: ${e.message}`, 'error');
-  }
+window._genSingle=async function(type){
+  if(!S.token){toast('请先登录','error');return;}
+  const topic=document.getElementById('gen-topic-input')?.value||'导数与极限入门';
+  const se=document.getElementById('rstatus-'+type);if(se){se.className='res-status generating';se.textContent='生成中...';}
+  const pc=$('#gen-progress-card');if(pc)pc.style.display='block';
+  try{
+    const{ok,data}=await api('/api/app/generate',{method:'POST',body:JSON.stringify({course_id:S.courseId,resource_type:type,topic})});
+    if(ok){S.genCache[type]=data;if(se){se.className='res-status ready';se.textContent='已完成';}$('#gen-results').innerHTML=fmtGenResult(type,data);toast(type+' 完成','success');}
+    else{if(se){se.className='res-status failed';se.textContent='失败';}toast('生成失败','error');}
+  }catch(e){if(se){se.className='res-status failed';se.textContent='失败';}toast('生成失败','error');}
 };
 
-window._genAllResources = async function() {
-  for (const type of ['mindmap','lecture_doc','quiz','ppt','study_plan']) {
-    await window._genSingle(type);
+window._genAllResources=async function(){
+  const types=['study_plan','mindmap','quiz','lecture_doc','ppt'];
+  const pc=$('#gen-progress-card');if(pc)pc.style.display='block';
+  for(let i=0;i<types.length;i++){
+    const gs=document.getElementById('gstep-'+i);if(gs){gs.className='progress-step active';gs.textContent='⏳ '+['生成路径','生成导图','生成测验','生成讲义','生成PPT'][i];}
+    await _genSingle(types[i]);
+    if(gs){gs.className='progress-step done';gs.textContent='✅ '+['生成路径','生成导图','生成测验','生成讲义','生成PPT'][i];}
   }
+  if(pc)setTimeout(()=>{pc.style.display='none';},3000);
 };
 
-function formatGenResult(type, data) {
-  if (type === 'mindmap' && data.mermaid) return `<div class="mermaid-wrap"><div class="mermaid">${data.mermaid}</div></div>`;
-  if (type === 'quiz' && data.items) {
-    return data.items.map((it,i) => `<div class="quiz-item"><div class="q-text">Q${i+1}. ${esc(it.question)}</div>` +
-      it.options.map((o,j) => `<div class="q-option${j===it.answer?' correct':''}">${String.fromCharCode(65+j)}. ${esc(o)}${j===it.answer?' ✓':''}</div>`).join('') +
-      `<div class="q-explain">💡 ${esc(it.explanation||'')}</div></div>`).join('');
-  }
-  if (type === 'lecture' && data.content) return `<div style="white-space:pre-wrap;font-size:13px;line-height:1.8">${formatAnswer(data.content)}</div>`;
-  if (type === 'ppt' && data.download_url) return `<div style="text-align:center;padding:30px"><div style="font-size:48px">📊</div><p style="font-weight:600">${esc(data.title||'PPT')}</p><a href="${S.apiBase}${data.download_url}" target="_blank" class="btn btn-primary">📥 下载 PPTX</a></div>`;
-  if (type === 'study_plan' && data.study_plan) {
-    const sp = data.study_plan;
-    return `<p style="font-size:12px;color:var(--gray-500)">${esc(sp.profile_summary||'')}</p>` +
-      (sp.steps||[]).map(s => `<div class="step-card"><div class="step-num">${s.order||'?'}</div><div class="step-info"><h4>${esc(s.topic||'')}</h4><p>${esc(s.reason||'')} | ${(s.resource_types||[]).join(',')} | ${s.estimated_minutes||'?'}min</p></div></div>`).join('');
-  }
-  return `<pre style="max-height:400px;overflow:auto;font-size:12px">${esc(JSON.stringify(data,null,2))}</pre>`;
+function fmtGenResult(type,data){
+  if(type==='mindmap'&&data.mermaid)return'<div class="mermaid-wrap"><div class="mermaid">'+data.mermaid+'</div></div>';
+  if(type==='quiz'&&data.items)return data.items.map((it,i)=>'<div class="quiz-item"><div class="q-text">Q'+(i+1)+'. '+esc(it.question)+'</div>'+it.options.map((o,j)=>'<div class="q-option'+(j===it.answer?' correct':'')+'">'+String.fromCharCode(65+j)+'. '+esc(o)+(j===it.answer?' ✓':'')+'</div>').join('')+'<div class="q-explain">💡 '+esc(it.explanation||'')+'</div></div>').join('');
+  if(type==='lecture'&&data.content)return'<div style="white-space:pre-wrap;font-size:13px;line-height:1.8">'+fmtAns(data.content)+'</div>';
+  if(type==='ppt'&&data.download_url)return'<div style="text-align:center;padding:20px"><div style="font-size:48px">📊</div><p style="font-weight:600">'+esc(data.title||'PPT')+'</p><p style="font-size:12px;color:var(--gray-500)">'+(data.slide_count||'?')+' 页</p><a href="'+S.apiBase+data.download_url+'" target="_blank" class="btn btn-primary">📥 下载 PPTX</a></div>';
+  if(type==='study_plan'&&data.study_plan){const sp=data.study_plan;return'<p style="font-size:12px;color:var(--gray-500)">'+esc(sp.profile_summary||'')+'</p>'+(sp.steps||[]).map(s=>'<div class="step-card"><div class="step-num">'+(s.order||'?')+'</div><div class="step-info"><h4>'+esc(s.topic||'')+'</h4><p>'+esc(s.reason||'')+' | '+(s.resource_types||[]).join(',')+' | '+(s.estimated_minutes||'?')+' 分钟</p></div></div>').join('');}
+  return'<pre style="max-height:400px;overflow:auto;font-size:12px">'+esc(JSON.stringify(data,null,2))+'</pre>';
 }
 
-// ═════════════════════════════════════════════════════════════════
-// PAGE: Courses
-// ═════════════════════════════════════════════════════════════════
-async function loadCourses() {
-  const el = document.getElementById('page-courses');
-  el.innerHTML = '<div class="loading-block"><span class="spinner"></span> 加载课程...</div>';
-
-  try {
-    // Always fresh fetch if S.token is set but courses not populated
-    let enriched = S.courses;
-    if ((!enriched || enriched.length === 0) && S.token) {
-      const {ok, data} = await api('/api/app/bootstrap');
-      if (ok && data.courses && data.courses.length) {
-        enriched = data.courses;
-        S.courses = data.courses;
-      }
+// ════════════ PAGE: COURSES ════════════
+async function loadCourses(){
+  const el=document.getElementById('page-courses');el.innerHTML='<div class="loading-block"><span class="spinner"></span> 加载课程...</div>';
+  try{
+    let enriched=S.courses;
+    if((!enriched||enriched.length===0)&&S.token){const{ok,data}=await api('/api/app/bootstrap');if(ok&&data.courses&&data.courses.length){enriched=data.courses;S.courses=data.courses;}}
+    let h='<div class="card"><div class="card-header"><h3>课程列表</h3><button class="btn btn-sm btn-primary" onclick="_createCourse()">+ 创建课程</button></div>';
+    if(!enriched||enriched.length===0)h+='<div class="empty-state"><div class="empty-icon">📚</div><p>暂无课程</p><p style="font-size:11px;color:var(--gray-400)">点击"创建课程"添加</p></div>';
+    else{
+      // Sort: KB courses first, preferred name first
+      enriched.sort((a,b)=>{const ka=a.has_knowledge_base?1:0,kb=b.has_knowledge_base?1:0;if(ka!==kb)return kb-ka;const na=(a.name||'').includes('高等数学上')?1:0,nb=(b.name||'').includes('高等数学上')?1:0;return nb-na;});
+      enriched.forEach(c=>{const sel=c.id===S.courseId;const hasKB=c.has_knowledge_base||(c.chunks_count>0);const kbBadge=hasKB?'<span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 6px;border-radius:8px;margin-left:6px">📚 知识库就绪</span>':'<span style="font-size:10px;background:var(--warning-bg);color:var(--warning);padding:1px 6px;border-radius:8px;margin-left:6px">⚠ 暂无资料</span>';
+        h+='<div class="course-card'+(sel?' selected':'')+'" onclick="_selectCourse('+c.id+',\''+esc(c.name||'')+'\','+(c.chunks_count||0)+','+hasKB+')"><h4>📚 '+esc(c.name||'')+(sel?' ✓':'')+kbBadge+'</h4><div class="course-meta"><span>课程知识点: '+(c.chunks_count||0)+'</span><span>'+esc(c.description||'')+'</span></div></div>';});
     }
-
-    let html = `<div class="card"><div class="card-header"><h3>课程列表</h3>
-      <button class="btn btn-sm btn-primary" onclick="window._createCourse()">+ 创建课程</button></div>`;
-
-    if (!enriched || enriched.length === 0) {
-      html += '<div class="empty-state"><div class="empty-icon">📚</div><p>暂无课程</p><p style="font-size:11px;color:var(--gray-400)">点击"创建课程"添加</p></div>';
-    } else {
-      enriched.forEach(c => {
-        const sel = c.id === S.courseId;
-        const hasKB = c.has_knowledge_base || (c.chunks_count > 0);
-        const kbBadge = hasKB
-          ? '<span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 6px;border-radius:8px;margin-left:6px">📚 知识库就绪</span>'
-          : '<span style="font-size:10px;background:var(--warning-bg);color:var(--warning);padding:1px 6px;border-radius:8px;margin-left:6px">⚠ 无资料</span>';
-        html += `<div class="course-card${sel?' selected':''}" onclick="window._selectCourse(${c.id},'${esc(c.name||'')}',${c.chunks_count||0},${hasKB})">
-          <h4>📚 ${esc(c.name||'')} ${sel?'✓':''} ${kbBadge}</h4>
-          <div class="course-meta"><span>知识块: ${c.chunks_count||0}</span><span>${esc(c.description||'')}</span></div>
-        </div>`;
-      });
-    }
-    html += '</div>';
-
-    // Create form
-    html += `<div class="card"><div class="card-header"><h3>创建课程</h3></div>
-      <div class="form-group"><label>课程名称</label><input id="new-course-name" placeholder="例: 高等数学"></div>
-      <div class="form-group"><label>课程描述</label><input id="new-course-desc" placeholder="简要说眀"></div>
-      <button class="btn btn-primary" onclick="window._createCourse()">创建</button></div>`;
-
-    el.innerHTML = html;
-  } catch(e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败: ${esc(e.message)}</p></div>`;
-  }
+    h+='</div><div class="card"><div class="card-header"><h3>创建课程</h3></div><div class="form-group"><label>课程名称</label><input id="new-course-name" placeholder="例: 高等数学"></div><div class="form-group"><label>课程描述</label><input id="new-course-desc" placeholder="简要说明"></div><button class="btn btn-primary" onclick="_createCourse()">创建</button></div>';
+    el.innerHTML=h;
+  }catch(e){el.innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败: '+esc(e.message)+'</p></div>';}
 }
 
-window._selectCourse = function(id, name, chunks, hasKB) {
-  S.courseId = id;
-  S.courseName = name;
-  S.kbChunks = chunks || 0;
-  S.kbReady = !!hasKB;
-  updateTopbar();
-  loadCourses();
-  if (!hasKB) {
-    toast(`已选择: ${name}（该课程暂无知识库，RAG问答可能缺少引用）`, 'info');
-  } else {
-    toast(`已选择: ${name}（${chunks||0} 知识块）`, 'success');
-  }
-};
+window._selectCourse=function(id,name,chunks,hasKB){S.courseId=id;S.courseName=name;S.kbChunks=chunks||0;S.kbReady=!!hasKB;updateTopbar();loadCourses();toast(hasKB?'已选择: '+name+'（'+chunks+' 知识点）':'已选择: '+name+'（暂无课程资料）',hasKB?'success':'info');};
+window._createCourse=async function(){const name=document.getElementById('new-course-name')?.value.trim();if(!name){toast('请输入课程名称','error');return;}const desc=document.getElementById('new-course-desc')?.value.trim()||'';try{const{ok,data}=await api('/api/courses',{method:'POST',body:JSON.stringify({name,description:desc})});if(ok){S.courseId=data.id;S.courseName=data.name;updateTopbar();loadCourses();toast('课程创建成功','success');}else toast('创建失败','error');}catch(e){toast('创建失败','error');}};
 
-window._createCourse = async function() {
-  const name = document.getElementById('new-course-name')?.value.trim();
-  if (!name) { toast('请输入课程名称','error'); return; }
-  const desc = document.getElementById('new-course-desc')?.value.trim() || '';
-  try {
-    const {ok, data} = await api('/api/courses', {method:'POST', body: JSON.stringify({name, description: desc})});
-    if (ok) {
-      S.courseId = data.id;
-      S.courseName = data.name;
-      updateTopbar();
-      loadCourses();
-      toast('课程创建成功', 'success');
-    } else {
-      toast(`创建失败: ${data.detail||''}`, 'error');
-    }
-  } catch(e) {
-    toast(`创建失败: ${e.message}`, 'error');
-  }
-};
-
-// ═════════════════════════════════════════════════════════════════
-// PAGE: Knowledge Base
-// ═════════════════════════════════════════════════════════════════
-function loadKnowledgeBase() {
-  const el = document.getElementById('page-knowledge');
-
-  let html = `<div class="card"><div class="card-header"><h3>📚 知识库状态</h3></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
-      <div class="grid-stat"><div class="val">${S.kbChunks||0}</div><div class="lbl">知识块</div></div>
-      <div class="grid-stat"><div class="val">${S.kbReady?'就绪':'未构建'}</div><div class="lbl">ChromaDB</div></div>
-      <div class="grid-stat"><div class="val">—</div><div class="lbl">OCR来源</div></div>
-    </div>
-    <div style="margin-top:12px;font-size:12px;color:var(--gray-500)">
-      <p>当前课程: ${esc(S.courseName)}</p>
-      <p>⚠ Tesseract OCR: 真实扫描PDF需安装Tesseract，文字型PDF可直接解析</p>
-    </div></div>`;
-
-  // Search test
-  html += `<div class="card"><div class="card-header"><h3>🔍 RAG 检索测试</h3></div>
-    <div style="display:flex;gap:8px;margin-bottom:8px">
-      <input id="rag-query" placeholder="输入关键词如: 导数、极限..." style="flex:1;padding:8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px">
-      <button class="btn btn-primary" onclick="window._ragSearch()">检索</button>
-    </div>
-    <div id="rag-results"><div class="empty-state" style="padding:20px"><p style="font-size:12px;color:var(--gray-400)">输入关键词测试知识库检索</p></div></div></div>`;
-
-  el.innerHTML = html;
+// ════════════ PAGE: KNOWLEDGE BASE ════════════
+function loadKnowledgeBase(){
+  const el=document.getElementById('page-knowledge');
+  el.innerHTML='<div class="card"><div class="card-header"><h3>📚 知识库状态</h3></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center"><div class="grid-stat"><div class="val">'+(S.kbChunks||0)+'</div><div class="lbl">课程知识点</div></div><div class="grid-stat"><div class="val">'+(S.kbReady?'就绪':'未构建')+'</div><div class="lbl">知识库索引</div></div><div class="grid-stat"><div class="val">—</div><div class="lbl">扫描资料识别</div></div></div><div style="margin-top:12px;font-size:12px;color:var(--gray-500)"><p>当前课程: '+esc(S.courseName)+'</p><p>⚠ 扫描版PDF需安装Tesseract OCR，文字型PDF可自动解析</p></div></div><div class="card"><div class="card-header"><h3>🔍 课程资料检索测试</h3></div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="rag-query" placeholder="输入关键词: 导数、极限..." style="flex:1;padding:8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"><button class="btn btn-primary" onclick="_ragSearch()">检索</button></div><div id="rag-results"><div class="empty-state" style="padding:20px"><p style="font-size:12px;color:var(--gray-400)">输入关键词测试知识库检索</p></div></div></div>';
 }
 
-window._ragSearch = async function() {
-  const q = document.getElementById('rag-query')?.value.trim();
-  if (!q) return;
-  const el = $('#rag-results');
-  el.innerHTML = '<div class="loading-block"><span class="spinner"></span> 检索中...</div>';
-  try {
-    const {ok, data} = await api(`/api/rag/courses/${S.courseId}/search?q=${encodeURIComponent(q)}&top_k=5`);
-    if (ok && data.results) {
-      let html = `<p style="font-size:12px;color:var(--gray-500);margin-bottom:8px">找到 ${data.results.length} 条结果</p>`;
-      data.results.forEach(r => {
-        html += `<div class="cite-item"><div class="cite-src">${esc(r.source||'unknown')}</div>
-          <div style="font-size:11px;margin-top:4px">${esc((r.content||'').substring(0,200))}</div>
-          <div class="cite-page">相关度: ${((r.score||0)*100).toFixed(0)}%</div></div>`;
-      });
-      el.innerHTML = html;
-    } else {
-      el.innerHTML = '<div class="empty-state"><p>无结果或知识库未构建</p></div>';
-    }
-  } catch(e) {
-    el.innerHTML = `<p style="color:var(--danger)">检索失败: ${esc(e.message)}</p>`;
-  }
-};
+window._ragSearch=async function(){const q=document.getElementById('rag-query')?.value.trim();if(!q)return;const el=$('#rag-results');el.innerHTML='<div class="loading-block"><span class="spinner"></span> 检索中...</div>';try{const{ok,data}=await api('/api/rag/courses/'+S.courseId+'/search?q='+encodeURIComponent(q)+'&top_k=5');if(ok&&data.results){let h='<p style="font-size:12px;color:var(--gray-500);margin-bottom:8px">找到 '+data.results.length+' 条结果</p>';data.results.forEach(r=>{h+='<div class="cite-item"><div class="cite-src">'+esc(r.source||'unknown')+'</div><div style="font-size:11px;margin-top:4px">'+esc((r.content||'').substring(0,200))+'</div><div class="cite-page">相关度: '+((r.score||0)*100).toFixed(0)+'%</div></div>';});el.innerHTML=h;}else el.innerHTML='<div class="empty-state"><p>无结果或知识库未构建</p></div>';}catch(e){el.innerHTML='<p style="color:var(--danger)">检索失败</p>';}};
 
-// ═════════════════════════════════════════════════════════════════
-// PAGE: Learning Path
-// ═════════════════════════════════════════════════════════════════
-function loadLearningPath() {
-  const el = document.getElementById('page-learning-path');
-
-  el.innerHTML = '<div class="loading-block"><span class="spinner"></span> 生成学习路径...</div>';
-
-  api('/api/app/generate', {
-    method:'POST',
-    body: JSON.stringify({course_id: S.courseId, resource_type:'study_plan', topic:'导数与极限入门'})
-  }).then(({ok, data}) => {
-    if (ok && data.study_plan) {
-      const sp = data.study_plan;
-      let html = `<div class="card"><div class="card-header"><h3>🗺️ ${esc(sp.title||'学习路径')}</h3></div>
-        <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px">${esc(sp.profile_summary||'')}</p>`;
-      (sp.steps||[]).forEach(s => {
-        html += `<div class="step-card"><div class="step-num">${s.order||'?'}</div><div class="step-info">
-          <h4>${esc(s.topic||'')}</h4>
-          <p>${esc(s.reason||'')}</p>
-          <p>资源: ${(s.resource_types||[]).join(', ')} | 预计: ${s.estimated_minutes||'?'}分钟</p>
-          <p style="color:var(--success)">🏋️ ${esc(s.practice||'')}</p>
-        </div></div>`;
-      });
-      if (sp.recommended_topics) {
-        html += `<div style="margin-top:12px"><b>推荐主题:</b> ${sp.recommended_topics.map(t=>esc(t)).join(' → ')}</div>`;
-      }
-      html += '</div>';
-      el.innerHTML = html;
-    } else {
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗺️</div><p>生成学习路径失败</p></div>';
-    }
-  }).catch(e => {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div><p>错误: ${esc(e.message)}</p></div>`;
-  });
+// ════════════ PAGE: LEARNING PATH ════════════
+function loadLearningPath(){
+  const el=document.getElementById('page-learning-path');
+  el.innerHTML='<div class="card"><div class="card-header"><h3>🗺️ 学习路径</h3><button class="btn btn-sm btn-primary" onclick="loadLearningPath()">🔄 重新生成</button></div><p style="font-size:11px;color:var(--gray-500);margin-bottom:8px">📌 示例路径 · 点击"重新生成"获取 AI 个性化版本</p>'+(DEFAULT_PLAN.steps||[]).map(s=>'<div class="step-card"><div class="step-num">'+(s.order||'?')+'</div><div class="step-info"><h4>'+esc(s.topic||'')+'</h4><p>'+esc(s.reason||'')+'</p><p>资源: '+(s.resource_types||[]).join(', ')+' | 预计: '+(s.estimated_minutes||'?')+' 分钟</p><p style="color:var(--success)">🏋️ '+esc(s.practice||'')+'</p></div></div>').join('')+'</div>';
+  // Async fetch real plan with timeout
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);
+  api('/api/app/generate',{method:'POST',body:JSON.stringify({course_id:S.courseId,resource_type:'study_plan',topic:'导数与极限入门'}),signal:controller.signal}).then(({ok,data})=>{clearTimeout(timeout);if(ok&&data.study_plan){const sp=data.study_plan;el.innerHTML='<div class="card"><div class="card-header"><h3>🗺️ '+esc(sp.title||'学习路径')+'</h3><button class="btn btn-sm btn-primary" onclick="loadLearningPath()">🔄 重新生成</button></div><p style="font-size:12px;color:var(--gray-500);margin-bottom:8px">'+esc(sp.profile_summary||'')+'</p>'+(sp.steps||[]).map(s=>'<div class="step-card"><div class="step-num">'+(s.order||'?')+'</div><div class="step-info"><h4>'+esc(s.topic||'')+'</h4><p>'+esc(s.reason||'')+'</p><p>资源: '+(s.resource_types||[]).join(', ')+' | 预计: '+(s.estimated_minutes||'?')+' 分钟</p></div></div>').join('')+'</div>';}}).catch(()=>{clearTimeout(timeout);});
 }
 
-// ═════════════════════════════════════════════════════════════════
-// PAGE: Settings
-// ═════════════════════════════════════════════════════════════════
-function loadSettings() {
-  const el = document.getElementById('page-settings');
+// ════════════ PAGE: SETTINGS ════════════
+function loadSettings(){
+  const el=document.getElementById('page-settings');
+  el.innerHTML='<div class="card"><div class="card-header"><h3>⚙️ API Key 配置</h3></div><div class="form-group"><label>API Key</label><input id="settings-key" type="password" placeholder="sk-..."><div class="form-hint">Key 仅保存在后端，不上传云端</div></div><div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="_saveSettings()">💾 保存</button><button class="btn btn-outline" onclick="_testConnection()">🔌 测试连接</button></div><div id="settings-status" style="margin-top:8px;font-size:12px"></div><div style="margin-top:12px"><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'settings-advanced\').style.display=document.getElementById(\'settings-advanced\').style.display===\'none\'?\'block\':\'none\'">⚙️ 高级设置</button></div><div id="settings-advanced" style="display:none;margin-top:8px"><div class="form-group"><label>API Base URL</label><input id="settings-base" value="https://api.deepseek.com/v1"></div><div class="form-group"><label>Model</label><input id="settings-model" value="deepseek-chat"></div></div></div><div class="card"><div class="card-header"><h3>📊 系统状态</h3></div><div id="settings-sys-status"><div class="loading-block"><span class="spinner"></span> 加载...</div></div></div><div class="card"><div class="card-header"><h3>🔒 安全说明</h3></div><p style="font-size:12px;color:var(--gray-500)">🔐 Key 仅保存在本地后端 .env · 🚫 不会上传云端 · ✅ 已排除 Git 跟踪</p></div>';
+  api('/api/settings/status').then(({ok,data})=>{const s=$('#settings-sys-status');if(ok)s.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px"><div><b>AI Provider:</b> '+esc(data.llm_provider||'—')+'</div><div><b>模型:</b> '+esc(data.llm_model||'—')+'</div><div><b>Mock模式:</b> '+(data.is_mock?'是':'否')+'</div><div><b>Key已配置:</b> '+(data.deepseek_configured?'✅':'❌')+'</div><div><b>语义检索:</b> '+esc(data.embedding_provider||'—')+'</div></div>';}).catch(()=>{});}
 
-  let html = `<div class="card"><div class="card-header"><h3>⚙️ API Key 配置</h3></div>
-    <div class="form-group"><label>API Key</label><input id="settings-key" type="password" placeholder="sk-...">
-      <div class="form-hint">Key 仅保存在后端 backend/.env，不会上传云端</div></div>
-    <div class="form-group"><label>API Base URL</label><input id="settings-base" value="https://api.deepseek.com/v1"></div>
-    <div class="form-group"><label>Model</label><input id="settings-model" value="deepseek-chat"></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-primary" onclick="window._saveSettings()">💾 保存配置</button>
-      <button class="btn btn-outline" onclick="window._testConnection()">🔌 测试连接</button>
-    </div>
-    <div id="settings-status" style="margin-top:8px;font-size:12px"></div></div>`;
+window._saveSettings=async function(){const key=document.getElementById('settings-key')?.value.trim(),base=document.getElementById('settings-base')?.value.trim(),model=document.getElementById('settings-model')?.value.trim();if(!key){toast('请输入 API Key','error');return;}const se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 保存中...';try{const{ok,data}=await api('/api/settings/llm',{method:'POST',body:JSON.stringify({provider:'deepseek',api_key:key,base_url:base||'https://api.deepseek.com/v1',model:model||'deepseek-chat'})});se.innerHTML=ok?'<span style="color:var(--success)">✅ 已保存</span>':'<span style="color:var(--danger)">❌ 失败: '+esc(data.detail||'')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
+window._testConnection=async function(){const se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 测试中...';try{const{ok,data}=await api('/api/settings/test-llm',{method:'POST',body:JSON.stringify({message:'你好，请回复连接成功'})});se.innerHTML=(ok&&data.ok)?'<span style="color:var(--success)">✅ 连接成功! '+data.latency_ms+'ms</span>':'<span style="color:var(--danger)">❌ '+esc(data.error||'连接失败')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
 
-  html += `<div class="card"><div class="card-header"><h3>📊 系统状态</h3></div>
-    <div id="settings-sys-status"><div class="loading-block"><span class="spinner"></span> 加载...</div></div></div>`;
-
-  html += `<div class="card"><div class="card-header"><h3>🔒 安全说明</h3></div>
-    <p style="font-size:12px;color:var(--gray-500)">• API Key 仅保存在后端 .env 文件中<br>• 已通过 .gitignore 排除，不会提交到 Git<br>• 前端通过后端代理调用，不直接暴露 Key<br>• status 接口仅返回 configured=true/false</p></div>`;
-
-  el.innerHTML = html;
-
-  // Load status
-  api('/api/settings/status').then(({ok, data}) => {
-    const sel = $('#settings-sys-status');
-    if (ok) {
-      sel.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
-        <div><b>LLM Provider:</b> ${esc(data.llm_provider||'—')}</div>
-        <div><b>LLM Model:</b> ${esc(data.llm_model||'—')}</div>
-        <div><b>Is Mock:</b> ${data.is_mock?'是':'否'}</div>
-        <div><b>DeepSeek配置:</b> ${data.deepseek_configured?'✅ 已配':'❌ 未配'}</div>
-        <div><b>Embedding:</b> ${esc(data.embedding_provider||'—')}</div>
-        <div><b>Embedding Mock:</b> ${data.embedding_is_mock?'是':'否'}</div>
-      </div>`;
+// ════════════ FULL DEMO ════════════
+window._runFullDemo=async function(){
+  if(!S.token){toast('请先登录','error');return;}
+  const stepNames=['系统状态','画像提取','RAG问答','学习路径','思维导图','测验','PPT'];
+  navTo('dashboard');const el=document.getElementById('page-dashboard');
+  el.innerHTML='<div class="card"><div class="card-header"><h3>🎯 一键演示</h3></div><div class="demo-steps" id="demo-steps">'+stepNames.map(s=>'<div class="demo-step" id="dstep-'+s+'">'+s+'</div>').join('')+'</div><div id="demo-output" style="margin-top:12px;font-size:12px"></div></div>';
+  const markStep=(name,status)=>{const s=document.getElementById('dstep-'+name);if(s)s.className='demo-step '+status;};
+  stepNames.forEach(s=>markStep(s,'running'));
+  const out=$('#demo-output');out.innerHTML='<span class="spinner"></span> 正在运行全流程演示...';
+  try{
+    const{ok,data}=await api('/api/app/run-demo',{method:'POST',body:JSON.stringify({course_id:S.courseId})});out.innerHTML='';
+    if(data.steps)data.steps.forEach(s=>{markStep(s.name,s.status==='success'?'done':'fail');out.innerHTML+='<div style="margin:2px 0">'+(s.status==='success'?'✅':'❌')+' '+s.name+': '+esc(s.detail||'')+'</div>';});
+    if(ok&&data.demo_results){
+      S.demoResults=data.demo_results;
+      // Fill artifacts
+      const dr=data.demo_results,rs=dr.resources||{};
+      if(dr.answer){const msgs=$('#chat-messages');msgs.innerHTML='';msgs.innerHTML+='<div class="msg-bubble user"><div class="msg-content">'+esc(dr.question||'')+'</div></div>';msgs.innerHTML+='<div class="msg-bubble agent"><div class="msg-content">'+fmtAns(dr.answer).substring(0,500)+'...</div></div>';if(dr.citations)renderCitations(dr.citations);}
+      if(rs.mindmap)renderArtifact('mindmap',rs.mindmap);
+      if(rs.quiz)renderArtifact('quiz',rs.quiz);
+      if(rs.lecture_doc)renderArtifact('lecture',rs.lecture_doc);
+      if(rs.ppt)renderArtifact('ppt',rs.ppt);
+      if(rs.study_plan)renderArtifact('study_plan',{study_plan:rs.study_plan});
+      out.innerHTML+='<div style="margin-top:8px"><button class="btn btn-primary" onclick="navTo(\'assistant\')">👀 查看完整结果</button></div>';
+      setTimeout(()=>{navTo('assistant');_switchArtifactTab('mindmap');},500);
     }
-  }).catch(() => {});
-}
-
-window._saveSettings = async function() {
-  const key = document.getElementById('settings-key')?.value.trim();
-  const base = document.getElementById('settings-base')?.value.trim();
-  const model = document.getElementById('settings-model')?.value.trim();
-  if (!key) { toast('请输入 API Key','error'); return; }
-
-  const statusEl = $('#settings-status');
-  statusEl.innerHTML = '<span class="spinner"></span> 保存中...';
-
-  try {
-    const {ok, data} = await api('/api/settings/llm', {
-      method:'POST',
-      body: JSON.stringify({
-        provider: 'deepseek',
-        api_key: key,
-        base_url: base || 'https://api.deepseek.com/v1',
-        model: model || 'deepseek-chat'
-      })
-    });
-    if (ok) {
-      statusEl.innerHTML = '<span style="color:var(--success)">✅ 配置已保存。可能需要重启后端。</span>';
-      toast('配置已保存', 'success');
-    } else {
-      statusEl.innerHTML = `<span style="color:var(--danger)">❌ 保存失败: ${esc(data.detail||'')}</span>`;
-    }
-  } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--danger)">❌ 错误: ${esc(e.message)}</span>`;
-  }
+  }catch(e){stepNames.forEach(s=>markStep(s,'fail'));out.innerHTML='<div style="color:var(--danger)">演示失败: '+esc(e.message)+'</div>';}
 };
 
-window._testConnection = async function() {
-  const statusEl = $('#settings-status');
-  statusEl.innerHTML = '<span class="spinner"></span> 测试连接中...';
-  try {
-    const {ok, data} = await api('/api/settings/test-llm', {
-      method:'POST',
-      body: JSON.stringify({message:'你好，请回复"连接成功"'})
-    });
-    if (ok && data.ok) {
-      statusEl.innerHTML = `<span style="color:var(--success)">✅ 连接成功! 延迟: ${data.latency_ms||'?'}ms</span>`;
-    } else {
-      statusEl.innerHTML = `<span style="color:var(--danger)">❌ 连接失败: ${esc(data.error||'')}</span>`;
-    }
-  } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--danger)">❌ 错误: ${esc(e.message)}</span>`;
-  }
-};
+// ════════════ HELPERS ════════════
+function fmtAns(t){if(!t)return'';return esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n---\n/g,'<hr style="border:none;border-top:1px dashed var(--gray-200);margin:8px 0">').replace(/\n/g,'<br>');}
 
-// ═════════════════════════════════════════════════════════════════
-// Full Demo
-// ═════════════════════════════════════════════════════════════════
-window._runFullDemo = async function() {
-  if (!S.token) { toast('请先登录','error'); return; }
-  if (S.demoRunning) return;
-  S.demoRunning = true;
-
-  navTo('dashboard');
-  const el = document.getElementById('page-dashboard');
-
-  const stepNames = ['系统状态','画像提取','RAG问答','学习路径','思维导图','测验','PPT'];
-  let html = '<div class="card"><div class="card-header"><h3>🎯 全流程演示</h3></div><div class="demo-steps" id="demo-steps">';
-  stepNames.forEach(s => { html += `<div class="demo-step" id="dstep-${s}">${s}</div>`; });
-  html += '</div><div id="demo-output" style="margin-top:12px;font-size:12px"></div></div>';
-  el.innerHTML = html;
-
-  const markStep = (name, status) => {
-    const step = document.getElementById('dstep-'+name);
-    if (step) step.className = 'demo-step ' + status;
-  };
-
-  const out = $('#demo-output');
-  for (const [i, name] of stepNames.entries()) {
-    markStep(name, 'running');
-    out.innerHTML += `<div>⏳ ${name}...</div>`;
-  }
-
-  try {
-    const {ok, data} = await api('/api/app/run-demo', {method:'POST', body: JSON.stringify({course_id: S.courseId})});
-    out.innerHTML = '';
-
-    if (ok && data.steps) {
-      data.steps.forEach(s => {
-        const status = s.status === 'success' ? 'done' : 'fail';
-        markStep(s.name, status);
-        out.innerHTML += `<div style="margin:2px 0">${s.status==='success'?'✅':'❌'} ${s.name}: ${esc(s.detail||'')}</div>`;
-      });
-      out.innerHTML += `<div style="margin-top:8px;font-weight:600;color:var(--success)">${data.summary||''}</div>`;
-    } else {
-      stepNames.forEach(s => markStep(s, 'fail'));
-      out.innerHTML = '<div style="color:var(--danger)">演示失败</div>';
-    }
-  } catch(e) {
-    stepNames.forEach(s => markStep(s, 'fail'));
-    out.innerHTML = `<div style="color:var(--danger)">错误: ${esc(e.message)}</div>`;
-  }
-  S.demoRunning = false;
-};
-
-// ═════════════════════════════════════════════════════════════════
-// Helpers
-// ═════════════════════════════════════════════════════════════════
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function formatAnswer(text) {
-  if (!text) return '';
-  // Basic markdown-like formatting
-  return esc(text)
-    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-    .replace(/\n---\n/g, '<hr style="border:none;border-top:1px dashed var(--gray-200);margin:8px 0">')
-    .replace(/\n/g, '<br>');
-}
-
-// ── Init ─────────────────────────────────────────────────────────
-window._navTo = navTo;
-window.initApp = initApp;
-
-// Suppress expected non-critical init errors (mermaid CDN, etc.)
-window.addEventListener('error', function(e) {
-  if (!e.message && !e.filename) {
-    e.preventDefault();
-    return false;
-  }
+// ── INIT ──────────────────────────────────────────
+window._navTo=navTo;window.initApp=initApp;
+window.addEventListener('error',function(e){if(!e.message&&!e.filename){e.preventDefault();return false;}});
+document.addEventListener('DOMContentLoaded',()=>{
+  try{if(typeof mermaid!=='undefined')mermaid.initialize({startOnLoad:false,theme:'default',securityLevel:'loose'});}catch(e){}
+  $$('.nav-item').forEach(item=>on(item,'click',()=>navTo(item.dataset.page)));
+  const ci=document.getElementById('chat-input');if(ci)on(ci,'keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();_sendQuestion();}});
+  try{initApp();}catch(e){console.warn('Init:',e.message);document.getElementById('page-assistant').innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><p>初始化失败</p><p style="font-size:11px;color:var(--gray-400)">请确认后端已启动</p></div>';}
 });
-
-// Bind nav items
-document.addEventListener('DOMContentLoaded', () => {
-  // Initialize mermaid with error suppression
-  try {
-    if (typeof mermaid !== 'undefined') {
-      mermaid.initialize({startOnLoad: false, theme: 'default', securityLevel: 'loose'});
-    }
-  } catch(e) { /* mermaid init optional */ }
-
-  $$('.nav-item').forEach(item => {
-    on(item, 'click', () => navTo(item.dataset.page));
-  });
-
-  // Enter key in chat
-  const chatInput = document.getElementById('chat-input');
-  if (chatInput) {
-    on(chatInput, 'keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        window._sendQuestion();
-      }
-    });
-  }
-
-  // Bootstrap with error boundary
-  try {
-    initApp();
-  } catch(e) {
-    console.warn('App init error:', e.message || 'unknown');
-    document.getElementById('page-dashboard').innerHTML =
-      '<div class="empty-state"><div class="empty-icon">⚠</div><p>初始化失败</p><p style="font-size:11px;color:var(--gray-400)">请确认后端已启动</p></div>';
-  }
-});
-
 })();
