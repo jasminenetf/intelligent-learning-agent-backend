@@ -68,11 +68,12 @@ async function initApp(){
     S.courses=data.courses||[];
     if(data.selected_course&&data.selected_course.id){S.courseId=data.selected_course.id;S.courseName=data.selected_course.name||'未选择';S.kbChunks=data.selected_course.chunks_count||0;S.kbReady=data.selected_course.has_knowledge_base||false;}
     if(data.user&&data.user.authenticated)S.user=data.user;
-    if(!S.token)await initDemo();
-    if(data.next_step==='configure_key'){navTo('settings');toast('请先配置 API Key','info');}
-    else if(data.next_step==='login'){await initDemo();navTo('assistant');}
+    // Clear stale token if not authenticated, then init demo
+    const isAuth = data.user && data.user.authenticated;
+    if(!isAuth && S.token){setToken('');S.user=null;}
+    if(data.next_step==='configure_key' && isAuth){navTo('settings');toast('请先配置 API Key','info');}
+    else if(!isAuth){await initDemo();navTo('assistant');}
     else if(data.next_step==='create_course'){navTo('courses');toast('请创建课程','info');}
-    else if(!S.token){await initDemo();navTo('assistant');}
     else{navTo('assistant');}
     updateTopbar();
   }catch(e){console.warn('Bootstrap:',e.message);navTo('settings');toast('无法连接后端','error');}
