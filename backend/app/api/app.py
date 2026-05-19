@@ -1,0 +1,572 @@
+"""
+Product aggregation API — unified frontend-friendly endpoints.
+
+Prefix: /api/app
+
+Provides bootstrap, demo-init, dashboard, ask, generate, run-demo
+so the frontend doesn't need to stitch together dozens of low-level APIs.
+"""
+
+import json
+import logging
+import time
+from datetime import datetime, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlmodel import Session, select
+
+from app.api.auth import get_current_user, get_current_user_optional
+from app.core.config import settings
+from app.core.database import get_session
+from app.core.security import create_access_token
+from app.models.course import Course
+from app.models.knowledge_chunk import KnowledgeChunk
+from app.models.student_profile import StudentProfile
+from app.models.user import User
+from app.schemas.resource import ResourceType
+from app.services.llm_provider import get_llm_provider
+from app.services.profile_service import (
+    extract_profile,
+    get_or_create_profile,
+    update_profile_from_extraction,
+)
+from app.services.qa_service import answer_course_question
+from app.services.rag_service import search_course, get_rag_status
+from app.services.resource_generator import generate_resource_pack
+from app.services.study_plan_service import generate_study_plan
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/app", tags=["app"])
+
+# ── Error codes ────────────────────────────────────────────────────────
+ERR_NOT_CONFIGURED = "NOT_CONFIGURED"
+ERR_NOT_AUTHENTICATED = "NOT_AUTHENTICATED"
+ERR_COURSE_NOT_FOUND = "COURSE_NOT_FOUND"
+ERR_NO_KNOWLEDGE_BASE = "NO_KNOWLEDGE_BASE"
+ERR_LLM_FAILED = "LLM_FAILED"
+ERR_RESOURCE_FAILED = "RESOURCE_FAILED"
+
+# ── Helpers ────────────────────────────────────────────────────────────
+
+def _safe(obj):
+    """Convert to JSON-safe dict."""
+    if obj is None:
+        return {}
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(mode="json")
+    if hasattr(obj, "dict"):
+        return obj.dict()
+    return obj
+
+
+def _chunk_count(course_id: int, session: Session) -> int:
+    return session.exec(
+        select(KnowledgeChunk).where(KnowledgeChunk.course_id == course_id)
+    ).all().__len__()
+
+
+def _hash_uid(username: str) -> str:
+    """Deterministic short hash for demo user IDs."""
+    import hashlib
+    return hashlib.md5(username.encode()).hexdigest()[:8]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /api/app/bootstrap
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/bootstrap")
+def api_bootstrap(
+    user: Optional[User] = Depends(get_current_user_optional),
+    session: Session = Depends(get_session),
+):
+    """Frontend opens → get startup state in one call. No auth required."""
+    # LLM status
+    try:
+        provider = get_llm_provider()
+        config = {
+            "deepseek_configured": bool(settings.DEEPSEEK_API_KEY),
+            "llm_provider": provider.provider,
+            "is_mock": (provider.provider == "mock"),
+            "embedding_provider": settings.EMBEDDING_PROVIDER,
+            "embedding_is_mock": (settings.EMBEDDING_PROVIDER == "hash_mock"),
+        }
+    except Exception:
+        config = {
+            "deepseek_configured": False,
+            "llm_provider": "unknown",
+            "is_mock": True,
+            "embedding_provider": settings.EMBEDDING_PROVIDER,
+            "embedding_is_mock": True,
+        }
+
+    # User
+    authenticated = user is not None
+    user_info = {}
+    if authenticated and user:
+        user_info = {
+            "authenticated": True,
+            "username": user.username,
+            "role": user.role,
+        }
+    else:
+        user_info = {"authenticated": False}
+
+    # Courses
+    courses = session.exec(select(Course)).all() if authenticated else []
+    course_list = []
+    for c in courses:
+        chunks = _chunk_count(int(c.id) if c.id else 0, session)
+        course_list.append({
+            "id": c.id,
+            "name": c.name,
+            "chunks_count": chunks,
+            "has_knowledge_base": chunks > 0,
+        })
+
+    # Profile
+    profile_exists = False
+    if authenticated and user:
+        profile = session.exec(
+            select(StudentProfile).where(StudentProfile.user_id == int(user.id) if user.id else 0)
+        ).first()
+        profile_exists = profile is not None
+
+    # Next step
+    if not config["deepseek_configured"]:
+        next_step = "configure_key"
+    elif not authenticated:
+        next_step = "login"
+    elif not course_list:
+        next_step = "create_course"
+    else:
+        next_step = "start_learning"
+
+    return {
+        "ok": True,
+        "app_ready": config["deepseek_configured"] and authenticated and bool(course_list),
+        "config": config,
+        "user": user_info,
+        "courses": course_list,
+        "selected_course": course_list[0] if course_list else {},
+        "profile_exists": profile_exists,
+        "next_step": next_step,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /api/app/demo-init
+# ═══════════════════════════════════════════════════════════════════════
+
+_DEMO_USERNAME = "demo"
+_DEMO_PASSWORD = "demo123456"
+_DEMO_COURSE_NAME = "高等数学"
+
+
+@router.post("/demo-init")
+def api_demo_init(session: Session = Depends(get_session)):
+    """One-click demo environment init. Returns token + course + profile."""
+    from app.core.security import get_password_hash
+
+    # 1. Find or create demo teacher
+    user = session.exec(select(User).where(User.username == _DEMO_USERNAME)).first()
+    created_user = False
+    if not user:
+        user = User(
+            username=_DEMO_USERNAME,
+            hashed_password=get_password_hash(_DEMO_PASSWORD),
+            role="teacher",
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        created_user = True
+        logger.info("Created demo teacher user (id=%s)", user.id)
+
+    # 2. Create token
+    token = create_access_token(data={"sub": str(user.id)})
+
+    # 3. Find or create course
+    course = session.exec(
+        select(Course).where(Course.name == _DEMO_COURSE_NAME)
+    ).first()
+    created_course = False
+    if not course:
+        course = Course(
+            name=_DEMO_COURSE_NAME,
+            description="高等数学个性化学习示例课程",
+            teacher_id=int(user.id) if user.id else 0,
+        )
+        session.add(course)
+        session.commit()
+        session.refresh(course)
+        created_course = True
+        logger.info("Created demo course '%s' (id=%s)", _DEMO_COURSE_NAME, course.id)
+
+    cid = int(course.id) if course.id else 0
+
+    # 4. Chunks count
+    chunks = _chunk_count(cid, session)
+    has_kb = chunks > 0
+
+    # 5. Profile — extract if not exists or if just created
+    profile = session.exec(
+        select(StudentProfile).where(StudentProfile.user_id == int(user.id) if user.id else 0)
+    ).first()
+    profile_created = False
+    if not profile:
+        profile = StudentProfile(user_id=int(user.id) if user.id else 0)
+        session.add(profile)
+        session.commit()
+        session.refresh(profile)
+        profile_created = True
+
+    # Auto-extract profile if new
+    extracted = {}
+    if profile_created or created_user:
+        try:
+            extracted = update_profile_from_extraction(
+                user, "我是数学专业学生，基础薄弱，喜欢通过思维导图和练习题来学习，准备考研", session
+            )
+        except Exception as e:
+            logger.warning("Demo profile extract failed: %s", e)
+            extracted = {}
+
+    # 6. Next step
+    if not settings.DEEPSEEK_API_KEY:
+        next_step = "configure_key"
+    elif not has_kb:
+        next_step = "upload_materials"
+    else:
+        next_step = "start_learning"
+
+    return {
+        "ok": True,
+        "token": token,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+        },
+        "course": {
+            "id": course.id,
+            "name": course.name,
+            "chunks_count": chunks,
+            "has_knowledge_base": has_kb,
+        },
+        "profile": extracted if extracted else _safe(profile),
+        "next_step": next_step,
+        "actions": {
+            "user_created": created_user,
+            "course_created": created_course,
+            "profile_extracted": bool(extracted),
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /api/app/dashboard
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/dashboard")
+def api_dashboard(
+    course_id: int = 2,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Workbench data: course + KB + profile + recent resources."""
+    cid = course_id
+    course = session.get(Course, cid)
+    if not course:
+        raise HTTPException(status_code=404, detail=ERR_COURSE_NOT_FOUND)
+
+    chunks = _chunk_count(cid, session)
+    try:
+        rag = get_rag_status()
+    except Exception:
+        rag = {"vector_count": 0, "embedding_provider": "unknown"}
+
+    profile = session.exec(
+        select(StudentProfile).where(StudentProfile.user_id == int(user.id) if user.id else 0)
+    ).first()
+
+    # Suggested actions
+    suggested = []
+    if not settings.DEEPSEEK_API_KEY:
+        suggested.append({"action": "configure_key", "label": "配置 DeepSeek API Key"})
+    if chunks == 0:
+        suggested.append({"action": "upload_materials", "label": "上传课程资料构建知识库"})
+    if not profile:
+        suggested.append({"action": "extract_profile", "label": "分析学习特征生成画像"})
+    if suggested:
+        suggested.append({"action": "start_qa", "label": "在「学习助手」中提问"})
+    else:
+        suggested.append({"action": "start_qa", "label": "去学习助手提问"})
+
+    return {
+        "ok": True,
+        "course": {
+            "id": course.id,
+            "name": course.name,
+            "description": course.description,
+        },
+        "knowledge_base": {
+            "chunks_count": chunks,
+            "vector_ready": rag.get("vector_count", 0) > 0,
+            "vector_count": rag.get("vector_count", 0),
+            "status": "ready" if chunks > 0 else "no_data",
+        },
+        "profile": _safe(profile) if profile else None,
+        "profile_exists": profile is not None,
+        "recent_resources": [],
+        "suggested_actions": suggested,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /api/app/ask
+# ═══════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel, Field
+
+class AppAskRequest(BaseModel):
+    course_id: int = Field(default=2)
+    question: str = Field(..., min_length=1)
+    top_k: int = Field(default=8, ge=1, le=20)
+
+
+@router.post("/ask")
+def api_app_ask(
+    body: AppAskRequest,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Unified Q&A — wraps RAG search + LLM answer."""
+    if not settings.DEEPSEEK_API_KEY:
+        raise HTTPException(status_code=400, detail=ERR_NOT_CONFIGURED)
+
+    try:
+        result = answer_course_question(
+            body.course_id, body.question, body.top_k, session, user
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{ERR_LLM_FAILED}: {e}")
+
+    if "error" in result:
+        code = 404 if "not found" in result["error"] else 400
+        raise HTTPException(status_code=code, detail=result["error"])
+
+    citations = result.get("citations", [])
+    used_rag = len(citations) > 0
+
+    return {
+        "ok": True,
+        "answer": result.get("answer", ""),
+        "course_name": result.get("course_name", ""),
+        "provider": result.get("provider", "unknown"),
+        "model": result.get("model", "unknown"),
+        "citations": citations,
+        "retrieved_chunks": result.get("retrieved_chunks", []),
+        "used_rag": used_rag,
+        "status": "ok",
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /api/app/generate
+# ═══════════════════════════════════════════════════════════════════════
+
+class AppGenerateRequest(BaseModel):
+    course_id: int = Field(default=2)
+    resource_type: str = Field(..., description="mindmap, lecture_doc, quiz, ppt, study_plan")
+    topic: str = Field(default="导数与极限入门", min_length=1)
+
+
+@router.post("/generate")
+def api_app_generate(
+    body: AppGenerateRequest,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Unified resource generation — wraps resource generator + study plan."""
+    rtype = body.resource_type.strip().lower()
+
+    # Validate type
+    valid_types = {"mindmap", "lecture_doc", "quiz", "ppt", "study_plan"}
+    if rtype not in valid_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid resource_type: {rtype}. Use: {', '.join(sorted(valid_types))}",
+        )
+
+    if not settings.DEEPSEEK_API_KEY:
+        raise HTTPException(status_code=400, detail=ERR_NOT_CONFIGURED)
+
+    # Get profile for personalization
+    profile = session.exec(
+        select(StudentProfile).where(StudentProfile.user_id == int(user.id) if user.id else 0)
+    ).first()
+
+    try:
+        if rtype == "study_plan":
+            plan = generate_study_plan(
+                course_id=body.course_id,
+                topic=body.topic,
+                profile=profile,
+                session=session,
+                top_k=8,
+            )
+            return {
+                "ok": True,
+                "resource_type": "study_plan",
+                "title": plan.get("title", body.topic),
+                "content": json.dumps(plan, ensure_ascii=False),
+                "study_plan": plan,
+                "metadata": {
+                    "generated_by": "deepseek",
+                    "fallback": plan.get("provider") == "rule",
+                    "used_profile": profile is not None,
+                    "used_rag": True,
+                    "model": "deepseek-chat",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+            }
+
+        # Resource types handled by resource generator
+        resource_types = [ResourceType(rtype)] if rtype != "study_plan" else [ResourceType.MINDMAP]
+
+        pack = generate_resource_pack(
+            course_id=body.course_id,
+            topic=body.topic,
+            resource_types=resource_types,
+            student_profile=_safe(profile) if profile else {},
+            top_k=8,
+            session=session,
+            user=user,
+        )
+
+        if not pack.resources:
+            raise HTTPException(status_code=500, detail="no resources generated")
+
+        res = pack.resources[0]
+        result = {
+            "ok": True,
+            "resource_type": res.type.value if hasattr(res.type, "value") else str(res.type),
+            "title": res.title,
+            "content": res.content if res.content else "",
+            "mermaid": res.mermaid if res.mermaid else None,
+            "items": res.items if res.items else None,
+            "download_url": res.download_url if res.download_url else None,
+            "slide_count": res.slide_count if res.slide_count else None,
+            "study_plan": res.study_plan if res.study_plan else None,
+            "metadata": {
+                "generated_by": "deepseek",
+                "fallback": res.fallback_used if res.fallback_used else False,
+                "used_profile": True,
+                "used_rag": True,
+                "model": "deepseek-chat",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+
+        return result
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        msg = str(e)
+        if "course not found" in msg:
+            raise HTTPException(status_code=404, detail=ERR_COURSE_NOT_FOUND)
+        if "no relevant" in msg:
+            raise HTTPException(status_code=400, detail=ERR_NO_KNOWLEDGE_BASE)
+        raise HTTPException(status_code=500, detail=f"{ERR_RESOURCE_FAILED}: {msg}")
+    except Exception as e:
+        logger.exception("Resource generation failed")
+        raise HTTPException(status_code=500, detail=f"{ERR_RESOURCE_FAILED}: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /api/app/run-demo
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.post("/run-demo")
+def api_run_demo(
+    course_id: int = 2,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Orchestrated demo pipeline. Returns step-by-step results."""
+    steps = []
+
+    def add_step(name, ok, detail=""):
+        steps.append({"name": name, "status": "success" if ok else "failed", "detail": detail})
+        return ok
+
+    cid = course_id
+    topic = "导数与极限入门"
+
+    # Step 1: System status
+    try:
+        provider = get_llm_provider()
+        add_step("系统状态", not provider.provider == "mock",
+                 f"provider={provider.provider}, mock={provider.provider == 'mock'}")
+    except Exception as e:
+        add_step("系统状态", False, str(e))
+
+    # Step 2: Profile
+    try:
+        update_profile_from_extraction(
+            user, "我是数学专业学生，基础薄弱，喜欢思维导图和练习题，准备考研", session
+        )
+        add_step("画像提取", True, "已提取8维学习画像")
+    except Exception as e:
+        add_step("画像提取", False, str(e))
+
+    # Step 3: RAG Q&A
+    try:
+        result = answer_course_question(cid, topic, 8, session, user)
+        ok = "error" not in result
+        add_step("RAG问答", ok, result.get("answer", "")[:100] if ok else result.get("error", ""))
+    except Exception as e:
+        add_step("RAG问答", False, str(e))
+
+    # Step 4: Study plan
+    try:
+        profile = session.exec(
+            select(StudentProfile).where(StudentProfile.user_id == int(user.id) if user.id else 0)
+        ).first()
+        plan = generate_study_plan(cid, topic, profile, session, top_k=8)
+        add_step("学习路径", True, f"{len(plan.get('steps', []))} steps")
+    except Exception as e:
+        add_step("学习路径", False, str(e))
+
+    # Step 5: Mindmap
+    try:
+        pack = generate_resource_pack(cid, topic, [ResourceType.MINDMAP], {}, 8, session, user)
+        add_step("思维导图", bool(pack.resources), f"title={pack.resources[0].title if pack.resources else 'N/A'}")
+    except Exception as e:
+        add_step("思维导图", False, str(e))
+
+    # Step 6: Quiz
+    try:
+        pack = generate_resource_pack(cid, topic, [ResourceType.QUIZ], {}, 8, session, user)
+        nitems = len(pack.resources[0].items) if pack.resources else 0
+        add_step("测验", nitems > 0, f"{nitems} questions")
+    except Exception as e:
+        add_step("测验", False, str(e))
+
+    # Step 7: PPT
+    try:
+        pack = generate_resource_pack(cid, topic, [ResourceType.PPT], {}, 8, session, user)
+        has_dl = bool(pack.resources[0].download_url) if pack.resources else False
+        add_step("PPT", has_dl, "download_url ready" if has_dl else "no download")
+    except Exception as e:
+        add_step("PPT", False, str(e))
+
+    success_count = sum(1 for s in steps if s["status"] == "success")
+    return {
+        "ok": success_count >= 4,
+        "steps": steps,
+        "summary": f"{success_count}/{len(steps)} steps successful",
+    }
