@@ -174,13 +174,24 @@ async function initDemo() {
       S.courseName = data.course ? data.course.name : '高等数学';
       S.kbReady = data.course ? data.course.has_knowledge_base : false;
       S.kbChunks = data.course ? data.course.chunks_count : 0;
+      // Refresh courses list after auth
+      try {
+        const {ok:ok2, data:d2} = await api('/api/app/bootstrap');
+        if (ok2 && d2.courses) S.courses = d2.courses;
+      } catch(e) { /* non-critical */ }
       updateTopbar();
-      toast('演示环境已就绪', 'success');
+      if (data.course && data.course.recommended_for_demo) {
+        toast('演示环境已就绪（课程: '+esc(data.course.name)+', '+data.course.chunks_count+' 知识块）', 'success');
+      } else if (data.message) {
+        toast(data.message, 'info');
+      } else {
+        toast('演示环境已就绪', 'success');
+      }
       return true;
     }
     return false;
   } catch(e) {
-    console.error('Demo init failed:', e);
+    console.warn('Demo init failed:', e.message || 'unknown');
     return false;
   }
 }
@@ -401,7 +412,10 @@ function renderArtifact(type, data) {
   if (type === 'mindmap' && data.mermaid) {
     panel.innerHTML = `<div class="mermaid-wrap"><div class="mermaid">${data.mermaid}</div><pre style="margin-top:8px;max-height:150px;overflow:auto">${esc(data.mermaid)}</pre></div>`;
     setTimeout(() => {
-      try { mermaid.run({nodes: [panel.querySelector('.mermaid')]}); } catch(e) {}
+      try {
+        const el = panel.querySelector('.mermaid');
+        if (el && el.textContent.trim()) mermaid.run({nodes: [el]});
+      } catch(e) { /* mermaid render failure is non-critical */ }
     }, 100);
   } else if (type === 'quiz' && data.items) {
     let html = '';
@@ -633,23 +647,31 @@ async function loadCourses() {
   el.innerHTML = '<div class="loading-block"><span class="spinner"></span> 加载课程...</div>';
 
   try {
-    const {ok, data} = await api('/api/courses');
-    if (!ok) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠</div><p>请先登录</p></div>'; return; }
-
-    S.courses = Array.isArray(data) ? data : [];
+    // Always fresh fetch if S.token is set but courses not populated
+    let enriched = S.courses;
+    if ((!enriched || enriched.length === 0) && S.token) {
+      const {ok, data} = await api('/api/app/bootstrap');
+      if (ok && data.courses && data.courses.length) {
+        enriched = data.courses;
+        S.courses = data.courses;
+      }
+    }
 
     let html = `<div class="card"><div class="card-header"><h3>课程列表</h3>
       <button class="btn btn-sm btn-primary" onclick="window._createCourse()">+ 创建课程</button></div>`;
 
-    if (S.courses.length === 0) {
+    if (!enriched || enriched.length === 0) {
       html += '<div class="empty-state"><div class="empty-icon">📚</div><p>暂无课程</p><p style="font-size:11px;color:var(--gray-400)">点击"创建课程"添加</p></div>';
     } else {
-      S.courses.forEach(c => {
+      enriched.forEach(c => {
         const sel = c.id === S.courseId;
-        html += `<div class="course-card${sel?' selected':''}" onclick="window._selectCourse(${c.id},'${esc(c.name)}')">
-          <h4>📚 ${esc(c.name)} ${sel?'✓':''}</h4>
-          <div class="course-meta"><span>ID: ${c.id}</span><span>${esc(c.description||'')}</span></div>
-          <div style="margin-top:6px;font-size:11px;color:var(--gray-500)">知识块: ${c.chunks_count||'未知'}</div>
+        const hasKB = c.has_knowledge_base || (c.chunks_count > 0);
+        const kbBadge = hasKB
+          ? '<span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 6px;border-radius:8px;margin-left:6px">📚 知识库就绪</span>'
+          : '<span style="font-size:10px;background:var(--warning-bg);color:var(--warning);padding:1px 6px;border-radius:8px;margin-left:6px">⚠ 无资料</span>';
+        html += `<div class="course-card${sel?' selected':''}" onclick="window._selectCourse(${c.id},'${esc(c.name||'')}',${c.chunks_count||0},${hasKB})">
+          <h4>📚 ${esc(c.name||'')} ${sel?'✓':''} ${kbBadge}</h4>
+          <div class="course-meta"><span>知识块: ${c.chunks_count||0}</span><span>${esc(c.description||'')}</span></div>
         </div>`;
       });
     }
@@ -667,12 +689,18 @@ async function loadCourses() {
   }
 }
 
-window._selectCourse = function(id, name) {
+window._selectCourse = function(id, name, chunks, hasKB) {
   S.courseId = id;
   S.courseName = name;
+  S.kbChunks = chunks || 0;
+  S.kbReady = !!hasKB;
   updateTopbar();
   loadCourses();
-  toast(`已选择: ${name}`, 'success');
+  if (!hasKB) {
+    toast(`已选择: ${name}（该课程暂无知识库，RAG问答可能缺少引用）`, 'info');
+  } else {
+    toast(`已选择: ${name}（${chunks||0} 知识块）`, 'success');
+  }
 };
 
 window._createCourse = async function() {
@@ -940,8 +968,23 @@ function formatAnswer(text) {
 window._navTo = navTo;
 window.initApp = initApp;
 
+// Suppress expected non-critical init errors (mermaid CDN, etc.)
+window.addEventListener('error', function(e) {
+  if (!e.message && !e.filename) {
+    e.preventDefault();
+    return false;
+  }
+});
+
 // Bind nav items
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize mermaid with error suppression
+  try {
+    if (typeof mermaid !== 'undefined') {
+      mermaid.initialize({startOnLoad: false, theme: 'default', securityLevel: 'loose'});
+    }
+  } catch(e) { /* mermaid init optional */ }
+
   $$('.nav-item').forEach(item => {
     on(item, 'click', () => navTo(item.dataset.page));
   });
@@ -957,7 +1000,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  initApp();
+  // Bootstrap with error boundary
+  try {
+    initApp();
+  } catch(e) {
+    console.warn('App init error:', e.message || 'unknown');
+    document.getElementById('page-dashboard').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">⚠</div><p>初始化失败</p><p style="font-size:11px;color:var(--gray-400)">请确认后端已启动</p></div>';
+  }
 });
 
 })();

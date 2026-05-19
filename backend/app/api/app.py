@@ -143,13 +143,26 @@ def api_bootstrap(
     else:
         next_step = "start_learning"
 
+    # Select best course: prefer KB courses first
+    selected_course = {}
+    kb_courses = [c for c in course_list if c.get("has_knowledge_base")]
+    if kb_courses:
+        # Prefer 高等数学上, then most chunks
+        kb_courses.sort(key=lambda c: (
+            0 if "高等数学上" in (c.get("name") or "") else 1,
+            -(c.get("chunks_count") or 0)
+        ))
+        selected_course = kb_courses[0]
+    elif course_list:
+        selected_course = course_list[0]
+
     return {
         "ok": True,
         "app_ready": config["deepseek_configured"] and authenticated and bool(course_list),
         "config": config,
         "user": user_info,
         "courses": course_list,
-        "selected_course": course_list[0] if course_list else {},
+        "selected_course": selected_course,
         "profile_exists": profile_exists,
         "next_step": next_step,
     }
@@ -187,12 +200,39 @@ def api_demo_init(session: Session = Depends(get_session)):
     # 2. Create token
     token = create_access_token(data={"sub": str(user.id)})
 
-    # 3. Find or create course
-    course = session.exec(
-        select(Course).where(Course.name == _DEMO_COURSE_NAME)
-    ).first()
+    # 3. Smart course selection: prefer courses with knowledge base
+    all_courses = session.exec(select(Course)).all()
     created_course = False
-    if not course:
+    course = None
+
+    # Build list of (course, chunks_count)
+    ranked = []
+    for c in all_courses:
+        chunks = _chunk_count(int(c.id) if c.id else 0, session)
+        ranked.append((c, chunks))
+
+    # Sort: KB courses first (by chunks desc), then non-KB by name match
+    def _course_rank(item):
+        c, chunks = item
+        name = (c.name or "").lower()
+        score = 0
+        if chunks > 0:
+            score += 1000 + chunks  # KB courses first, more chunks = better
+        if "高等数学上" in name:
+            score += 500  # exact preferred course
+        elif "高等数学" in name:
+            score += 300
+        return -score  # descending
+
+    ranked.sort(key=_course_rank)
+
+    if ranked:
+        course = ranked[0][0]
+        chosen_chunks_pre = ranked[0][1]
+        logger.info("Demo course selected: id=%s name=%s chunks=%d",
+                     course.id, course.name, chosen_chunks_pre)
+    else:
+        # No courses at all — create one
         course = Course(
             name=_DEMO_COURSE_NAME,
             description="高等数学个性化学习示例课程",
@@ -233,13 +273,16 @@ def api_demo_init(session: Session = Depends(get_session)):
             logger.warning("Demo profile extract failed: %s", e)
             extracted = {}
 
-    # 6. Next step
+    # 6. Next step & message
     if not settings.DEEPSEEK_API_KEY:
         next_step = "configure_key"
+        message = None
     elif not has_kb:
-        next_step = "upload_materials"
+        next_step = "upload_materials_or_try_demo"
+        message = "当前示例课程暂无知识库，可上传资料或切换到已有知识库课程"
     else:
         next_step = "start_learning"
+        message = None
 
     return {
         "ok": True,
@@ -254,9 +297,11 @@ def api_demo_init(session: Session = Depends(get_session)):
             "name": course.name,
             "chunks_count": chunks,
             "has_knowledge_base": has_kb,
+            "recommended_for_demo": has_kb,
         },
         "profile": extracted if extracted else _safe(profile),
         "next_step": next_step,
+        "message": message,
         "actions": {
             "user_created": created_user,
             "course_created": created_course,
