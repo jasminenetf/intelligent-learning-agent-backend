@@ -6,7 +6,6 @@
 <title>智学·多智能体 — 学习工作台</title>
 <link rel="stylesheet" href="app.css">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div id="toast" class="toast" style="display:none"></div>
@@ -97,7 +96,6 @@
           <div class="tab-panel" id="artifact-lecture"><div class="empty-state"><div class="empty-icon">📄</div><p>讲义文档展示区</p></div></div>
           <div class="tab-panel" id="artifact-ppt"><div class="empty-state"><div class="empty-icon">📊</div><p>PPT预习区</p></div></div>
           <div class="tab-panel" id="artifact-study_plan"><div class="empty-state"><div class="empty-icon">🗺️</div><p>学习路径展示区</p></div></div>
-          <div class="tab-panel" id="artifact-video"><div class="empty-state"><div class="empty-icon">🎬</div><p>数字人微课</p><p style="font-size:11px;color:var(--gray-400)">生成后在此播放</p></div></div>
         </div>
       </div>
 
@@ -111,8 +109,7 @@
         </div>
         <div class="profile-mini" id="profile-mini" style="margin-top:12px">
           <h4>🎓 学习画像</h4>
-          <canvas id="profileRadarChart" width="240" height="240" style="max-width:100%;margin:8px 0"></canvas>
-          <p style="font-size:11px;color:var(--gray-400)" id="profile-text">尚未提取画像</p>
+          <p style="font-size:11px;color:var(--gray-400)">尚未提取画像</p>
         </div>
       </div>
     </div>

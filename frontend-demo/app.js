@@ -42,16 +42,13 @@ Bus.on('agent:trace-update', function(traces) {
 Bus.on('profile:updated', function(delta) {
   S.profileDelta = delta || {};
   var el = document.getElementById('profile-mini');
-  var txt = document.getElementById('profile-text');
   if (el && delta) {
     var parts = [];
     if (delta.knowledge_level) parts.push('水平: '+delta.knowledge_level);
     if (delta.cognitive_style) parts.push('风格: '+delta.cognitive_style);
     if (delta.last_topic) parts.push('主题: '+delta.last_topic);
-    if (txt && parts.length) txt.innerHTML = '📊 '+parts.join(' | ');
+    if (parts.length) el.innerHTML = '<div style="font-size:11px;color:var(--success)">📊 '+parts.join(' | ')+'</div>';
   }
-  // Update radar chart
-  updateRadarChart(delta);
 });
 
 const $ = (s,c) => (c||document).querySelector(s);
@@ -689,7 +686,7 @@ window._quickGenerate=async function(type){
 
 function renderArtifactTabs(){
   const tabs=$('#artifacts-tabs');if(!tabs)return;
-  tabs.innerHTML='';['mindmap','quiz','lecture','ppt','study_plan','video'].forEach(t=>{const l={mindmap:'思维导图',quiz:'练习题库',lecture:'讲义文档',ppt:'PPT预览',study_plan:'学习路径',video:'数字人微课'}[t];tabs.innerHTML+='<div class="artifacts-tab" data-tab="'+t+'" onclick="_switchArtifactTab(\''+t+'\')">'+l+'</div>';});
+  tabs.innerHTML='';['mindmap','quiz','lecture','ppt','study_plan'].forEach(t=>{const l={mindmap:'思维导图',quiz:'练习题库',lecture:'讲义文档',ppt:'PPT预览',study_plan:'学习路径'}[t];tabs.innerHTML+='<div class="artifacts-tab" data-tab="'+t+'" onclick="_switchArtifactTab(\''+t+'\')">'+l+'</div>';});
   const first=$('.artifacts-tab',tabs);if(first)first.classList.add('active');
 }
 
@@ -731,12 +728,6 @@ function renderArtifact(type,data){
     panel.innerHTML='<div style="padding:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><b style="font-size:14px">🗺️ 学习路径</b><span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 8px;border-radius:10px;margin-left:8px">AI 已生成</span></div><button class="btn btn-sm btn-primary" onclick="_quickGenerate(\'study_plan\')">🔄 重新生成</button></div>'+
     '<p style="font-size:12px;color:var(--gray-500);margin-bottom:12px">'+esc(sp.profile_summary||'研究生个性化路径')+'</p>'+
     (sp.steps||[]).map(s=>'<div class="step-card"><div class="step-num">'+(s.order||'?')+'</div><div class="step-info"><h4>'+esc(s.topic||'')+'</h4><p style="margin:2px 0">'+esc(s.reason||'')+'</p><p style="margin:2px 0"><span style="background:var(--primary-bg);padding:1px 6px;border-radius:4px;font-size:10px;margin-right:4px">'+(s.resource_types||[]).join('</span><span style="background:var(--primary-bg);padding:1px 6px;border-radius:4px;font-size:10px;margin-right:4px">')+'</span><span style="font-size:10px;color:var(--gray-400)">⏱ '+(s.estimated_minutes||'?')+' 分钟</span></p><button class="btn btn-sm btn-outline" style="margin-top:4px" onclick="toast(\'后续版本将支持从路径生成对应资源\',\'info\')">📦 生成对应资源</button></div></div>').join('')+'</div>';
-  } else if(type==='video'&&data.video_url){
-    var script = data.narration_script || '';
-    panel.innerHTML='<div style="padding:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><b style="font-size:14px">🎬 数字人微课</b><span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 8px;border-radius:10px;margin-left:8px">AI 已生成</span></div></div>'+
-      '<video id="digitalHumanPlayer" controls width="100%" style="border-radius:8px;background:#000" src="'+S.apiBase+data.video_url+'"></video>'+
-      (script?'<div id="narrationScriptArea" style="margin-top:8px;padding:10px;background:var(--gray-50);border-radius:6px;font-size:12px;color:var(--gray-600);max-height:120px;overflow-y:auto">📜 '+esc(script)+'</div>':'')+
-      '</div>';
   } else if(data.content){
     panel.innerHTML='<pre style="max-height:400px;overflow:auto;font-size:12px;white-space:pre-wrap;padding:12px">'+esc(JSON.stringify(data,null,2))+'</pre>';
   }
@@ -965,53 +956,9 @@ window._createCourse=async function(){const name=document.getElementById('new-co
 // ════════════ PAGE: KNOWLEDGE BASE ════════════
 function loadKnowledgeBase(){
   const el=document.getElementById('page-knowledge');
-  el.innerHTML='<div class="card"><div class="card-header"><h3>📚 知识库状态</h3></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center"><div class="grid-stat"><div class="val">'+(S.kbChunks||0)+'</div><div class="lbl">课程知识点</div></div><div class="grid-stat"><div class="val">'+(S.kbReady?'就绪':'未构建')+'</div><div class="lbl">资料检索</div></div><div class="grid-stat"><div class="val">—</div><div class="lbl">扫描资料</div></div></div><div style="margin-top:12px;font-size:12px;color:var(--gray-500)"><p>当前课程: '+esc(S.courseName)+'</p><p>⚠ 扫描版PDF需安装Tesseract OCR，文字型PDF可自动解析</p></div></div><div class="card"><div class="card-header"><h3>🔍 课程资料检索测试</h3></div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="rag-query" placeholder="输入关键词: 导数、极限..." style="flex:1;padding:8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"><button class="btn btn-primary" onclick="_ragSearch()">检索</button></div><div id="rag-results"><div class="empty-state" style="padding:20px"><p style="font-size:12px;color:var(--gray-400)">输入关键词测试知识库检索</p></div></div></div>'+
-    '<div class="card"><div class="card-header"><h3>📤 上传课程资料</h3></div>'+
-    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="file" id="kb-upload-file" accept=".pdf,.txt,.md,.docx" style="font-size:12px"><button class="btn btn-primary" onclick="_uploadKBFile()">⬆ 上传并索引</button></div>'+
-    '<div id="kb-upload-progress" style="margin-top:8px;font-size:11px;color:var(--gray-500)"></div>'+
-    '<p style="font-size:10px;color:var(--gray-400);margin-top:4px">支持 PDF、TXT、MD、DOCX 格式 · 自动解析、分块、向量化入库</p></div>';
+  el.innerHTML='<div class="card"><div class="card-header"><h3>📚 知识库状态</h3></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center"><div class="grid-stat"><div class="val">'+(S.kbChunks||0)+'</div><div class="lbl">课程知识点</div></div><div class="grid-stat"><div class="val">'+(S.kbReady?'就绪':'未构建')+'</div><div class="lbl">资料检索</div></div><div class="grid-stat"><div class="val">—</div><div class="lbl">扫描资料</div></div></div><div style="margin-top:12px;font-size:12px;color:var(--gray-500)"><p>当前课程: '+esc(S.courseName)+'</p><p>⚠ 扫描版PDF需安装Tesseract OCR，文字型PDF可自动解析</p></div></div><div class="card"><div class="card-header"><h3>🔍 课程资料检索测试</h3></div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="rag-query" placeholder="输入关键词: 导数、极限..." style="flex:1;padding:8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px"><button class="btn btn-primary" onclick="_ragSearch()">检索</button></div><div id="rag-results"><div class="empty-state" style="padding:20px"><p style="font-size:12px;color:var(--gray-400)">输入关键词测试知识库检索</p></div></div></div>';
 }
 
-
-
-// ════════════ R2.3: FILE UPLOAD ════════════
-window._uploadKBFile = async function() {
-  var fileInput = document.getElementById('kb-upload-file');
-  var file = fileInput ? fileInput.files[0] : null;
-  if (!file) { toast('请选择文件', 'error'); return; }
-  var progress = document.getElementById('kb-upload-progress');
-  if (progress) progress.innerHTML = '<span class="spinner"></span> 正在解析文档... (30%)';
-  
-  var formData = new FormData();
-  formData.append('file', file);
-  formData.append('course_id', S.courseId);
-  
-  try {
-    if (progress) progress.innerHTML = '<span class="spinner"></span> 正在提取实体依赖... (70%)';
-    var res = await fetch(S.apiBase + '/api/rag/upload', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + S.token },
-      body: formData
-    });
-    var data = await res.json().catch(function(){ return {}; });
-    
-    if (res.ok && data.ok) {
-      if (progress) progress.innerHTML = '✅ ' + (data.message || '上传成功') + ' (100%)';
-      toast(data.message || '上传成功', 'success');
-      // Refresh KB stats
-      S.kbChunks = (S.kbChunks || 0) + (data.chunk_count || 0);
-      S.kbReady = true;
-      updateTopbar();
-      setTimeout(function(){ loadKnowledgeBase(); }, 1500);
-    } else {
-      if (progress) progress.innerHTML = '❌ ' + (data.detail || '上传失败');
-      toast(data.detail || '上传失败', 'error');
-    }
-  } catch(e) {
-    if (progress) progress.innerHTML = '❌ 网络错误';
-    toast('上传失败: ' + e.message, 'error');
-  }
-};
 window._ragSearch=async function(){const q=document.getElementById('rag-query')?.value.trim();if(!q)return;const el=$('#rag-results');el.innerHTML='<div class="loading-block"><span class="spinner"></span> 检索中...</div>';try{const{ok,data}=await api('/api/rag/courses/'+S.courseId+'/search?q='+encodeURIComponent(q)+'&top_k=5');if(ok&&data.results){let h='<p style="font-size:12px;color:var(--gray-500);margin-bottom:8px">找到 '+data.results.length+' 条结果</p>';data.results.forEach(r=>{h+='<div class="cite-card"><div class="cite-header"><span class="cite-filename">📄 '+esc(r.source||'资料')+'</span><span class="cite-score high">相关度 '+Math.round((r.score||0)*100)+'%</span></div><div class="cite-snippet">'+esc((r.content||'').substring(0,200))+'</div><div class="cite-meta">'+(r.page_number?'<span>📍 第'+r.page_number+'页</span>':'')+'</div></div>';});el.innerHTML=h;}else el.innerHTML='<div class="empty-state"><p>无结果或知识库未构建</p></div>';}catch(e){el.innerHTML='<div class="error-card"><div class="err-title">检索失败</div><div class="err-suggestion">请确认知识库已构建</div></div>';}};
 
 // ════════════ PAGE: LEARNING PATH ════════════
@@ -1082,15 +1029,14 @@ window.submitQuizAnswer = function(qIdx, optIdx, correctIdx) {
   var btns = document.querySelectorAll(sel);
   var fb = document.getElementById('quiz-fb-'+qIdx);
   var expl = document.getElementById('quiz-expl-'+qIdx);
-  var isCorrect = optIdx === correctIdx;
   btns.forEach(function(b,i) {
     b.disabled = true;
     if (i === correctIdx) b.classList.add('correct');
-    else if (!isCorrect && i === optIdx) b.classList.add('wrong');
+    else if (i === optIdx && i !== correctIdx) b.classList.add('wrong');
   });
   if (fb) {
-    fb.className = 'quiz-feedback '+(isCorrect?'correct-fb':'wrong-fb')+' show';
-    fb.innerHTML = isCorrect?'✅ 回答正确！':'❌ 回答错误，正确答案是 '+String.fromCharCode(65+correctIdx);
+    fb.className = 'quiz-feedback '+(optIdx===correctIdx?'correct-fb':'wrong-fb')+' show';
+    fb.innerHTML = optIdx===correctIdx?'✅ 回答正确！':'❌ 回答错误，正确答案是 '+String.fromCharCode(65+correctIdx);
     fb.style.display='block';
   }
   if (expl) { expl.className = 'quiz-feedback show'; expl.style.display='block'; }
@@ -1102,68 +1048,7 @@ window.submitQuizAnswer = function(qIdx, optIdx, correctIdx) {
     qEl.appendChild(toastEl);
     setTimeout(function(){ if(toastEl.parentNode) toastEl.parentNode.removeChild(toastEl); }, 4000);
   }
-  // R2.3: call quiz-submit API for error-loop path reconstruction
-  if (!isCorrect && S.token) {
-    var wrongConcept = expl ? (expl.textContent||'').replace('💡 ','').substring(0,30) : '';
-    api('/api/app/quiz-submit', {method:'POST', body:JSON.stringify({
-      course_id: S.courseId, quiz_id: 'quiz-'+qIdx, is_correct: false, wrong_concept: wrongConcept || '导数与极限'
-    })}).then(function(res) {
-      if (res.ok && res.data.path_reconstructed) {
-        toast(res.data.message || '学习路径已重构', 'info');
-        if (res.data.updated_study_plan) {
-          S.genCache['study_plan'] = {study_plan: res.data.updated_study_plan};
-          toast('📌 学习路径已更新，请查看学习路径页面', 'info');
-        }
-      }
-    }).catch(function(){});
-  }
 };
-
-// ════════════ TASK 1: RADAR CHART ════════════
-var _radarChart = null;
-function updateRadarChart(profile) {
-  var canvas = document.getElementById('profileRadarChart');
-  if (!canvas) return;
-  var ctx = canvas.getContext('2d');
-  var data = profile || S.profileDelta || {};
-
-  var labels = ['知识基础','认知风格','学习节奏','知识短板','学习动机','元学习','资源偏好','专注度'];
-  var values = [
-    data.knowledge_level === 'advanced' ? 85 : data.knowledge_level === 'intermediate' ? 60 : 35,
-    data.cognitive_style === 'visual' ? 80 : data.cognitive_style === 'logical' ? 70 : 50,
-    data.pace_preference === 'fast' ? 75 : 50,
-    data.detected_weakness ? 30 : 65,
-    data.learning_goal === '考研复习' ? 90 : 55,
-    60, 55, 65
-  ];
-
-  if (_radarChart) { _radarChart.destroy(); _radarChart = null; }
-
-  _radarChart = new Chart(ctx, {
-    type: 'radar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: '学习画像',
-        data: values,
-        backgroundColor: 'rgba(79,70,229,0.15)',
-        borderColor: 'rgba(79,70,229,0.8)',
-        borderWidth: 2,
-        pointBackgroundColor: '#4f46e5',
-        pointBorderColor: '#fff',
-        pointRadius: 4,
-        tension: 0.4
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      animation: { duration: 800, easing: 'easeOutQuart' },
-      scales: { r: { beginAtZero: true, max: 100, ticks: { stepSize: 20, font: { size: 8 } }, pointLabels: { font: { size: 9 } } } },
-      plugins: { legend: { display: false } }
-    }
-  });
-}
 
 // ── INIT ──────────────────────────────────────────
 window._navTo=navTo;window.initApp=initApp;
