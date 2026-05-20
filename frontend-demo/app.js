@@ -15,7 +15,7 @@ const S = {
   demoResults: null, genCache: {}, zoomScale: 1, zoomPanX: 0, zoomPanY: 0,
   lastQuestion: '', lastAnswerTopic: '导数与极限入门',
   agentTraceAnimId: null, currentAnswerData: null, profileDelta: {},
-  askTimeoutId: null, askAbortController: null
+  askTimeoutId: null, askAbortController: null, askInFlight: false
 };
 window.appState = S;
 
@@ -555,17 +555,18 @@ window._askQuestion = async function(q) {
   var timeoutId = setTimeout(function() {
     var el = document.getElementById(lid);
     if (el) {
-      el.innerHTML = '<div class="msg-content"><div class="error-card" style="border-color:var(--warning);background:var(--warning-bg)"><div class="err-title" style="color:var(--warning)">⏳ 回答生成较慢</div><div class="err-detail">AI 模型响应时间较长，可以继续等待或使用演示答案完成展示</div><div class="err-suggestion">真实请求仍在后台进行中，完成后会替换此卡片</div><div class="err-actions"><button class="btn btn-sm btn-outline" onclick="var t=document.getElementById(\''+lid+'\');if(t)t.innerHTML=\'<div class=msg-content><span class=spinner></span> 继续等待...</div>\'">⏳ 继续等待</button> <button class="btn btn-sm btn-primary" onclick="showDemoFallbackAnswer(\''+esc(q)+'\',\''+lid+'\')">📋 使用演示答案</button></div></div></div>';
+      el.innerHTML = '<div class="msg-content"><div class="error-card" style="border-color:var(--warning);background:var(--warning-bg)"><div class="err-title" style="color:var(--warning)">⏳ 回答生成较慢</div><div class="err-detail">AI 模型响应时间较长，可以继续等待或使用演示答案完成展示</div><div class="err-suggestion">真实请求仍在后台进行中，完成后会替换此卡片</div><div class="err-actions"><button class="btn btn-sm btn-outline" id="fallback-wait-btn">⏳ 继续等待</button> <button class="btn btn-sm btn-primary" id="fallback-demo-btn">📋 使用演示答案</button></div></div></div>';
+  setTimeout(function(){
+    var waitBtn=document.getElementById('fallback-wait-btn');
+    var demoBtn=document.getElementById('fallback-demo-btn');
+    var el2=document.getElementById(lid);
+    if(waitBtn) waitBtn.onclick=function(){ if(el2)el2.innerHTML='<div class="msg-content"><span class="spinner"></span> 继续等待中...</div>'; };
+    if(demoBtn) demoBtn.onclick=function(){ showDemoFallbackAnswer('+JSON.stringify(esc(q))+','+JSON.stringify(lid)+'); };
+  },50);
     }
   }, 25000);
   
 
-window._sendQuestion=async function(){
-  const input=document.getElementById('chat-input');const q=input.value.trim();
-  if(!q)return;
-  input.value='';
-  await _askQuestion(q);
-};
   try{
     const{ok,data}=await api('/api/app/ask',{method:'POST',body:JSON.stringify({course_id:S.courseId,question:q,top_k:8})});
     const le=document.getElementById(lid);if(le)le.remove();
@@ -610,12 +611,32 @@ window._sendQuestion=async function(){
       '<div class="err-suggestion">建议：检查后端服务是否正在运行，然后重试</div>'+
       '<div class="err-actions"><button class="btn btn-sm btn-primary" onclick="_sendQuestion()">🔄 重试</button></div></div></div></div>';
     agentMarkFail();
+  } finally {
+    if (typeof slowHintId !== 'undefined') clearTimeout(slowHintId);
+    if (typeof timeoutId !== 'undefined') clearTimeout(timeoutId);
   }
-  if (slowHintId) clearTimeout(slowHintId);
-  if (timeoutId) clearTimeout(timeoutId);
   msgs.scrollTop=msgs.scrollHeight;
 };
 
+// ════════════ SEND BUTTON (top-level, with lock) ════════════
+window._sendQuestion=async function(){
+  var input=document.getElementById('chat-input');
+  var q=input?input.value.trim():'';
+  if(!q){ toast('请输入问题','info'); return; }
+  if(S.askInFlight){ toast('当前正在生成回答，请稍等或等待完成','info'); return; }
+  S.askInFlight = true;
+  var btn = document.querySelector('.chat-input-row .btn-primary');
+  if(btn){ btn.textContent='生成中...'; btn.disabled=true; }
+  try {
+    input.value='';
+    input.disabled=true;
+    await _askQuestion(q);
+  } finally {
+    S.askInFlight = false;
+    if(btn){ btn.textContent='发送'; btn.disabled=false; }
+    if(input) input.disabled=false;
+  }
+};
 
 // ════════ R2.2 AGENT ANIMATION (EventBus) ═══════=
 function animateAgentAskR2() {
