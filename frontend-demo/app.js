@@ -100,6 +100,15 @@ function updateTopbar(){
 window._toggleSidebar=function(){S.sidebarCollapsed=!S.sidebarCollapsed;const sb=document.getElementById('sidebar');sb.classList.toggle('collapsed',S.sidebarCollapsed);};
 
 // ════════════ BOOTSTRAP ════════════
+
+function friendlyError(e, action) {
+  var msg = (e.message||'');
+  if(msg==='Failed to fetch'||msg.includes('fetch')||msg.includes('NetworkError')){
+    return '无法连接后端服务。请确认后端已启动，然后刷新页面或点击重试。';
+  }
+  return msg || ('操作失败: ' + (action||'请求'));
+}
+
 async function initApp(){
   try{
     const{ok,data}=await api('/api/app/bootstrap');
@@ -1070,7 +1079,7 @@ window._runFullDemo=async function(){
       toast('演示完成！已生成 问答、思维导图、测验、讲义、PPT 和学习路径','success');
       setTimeout(()=>{navTo('assistant');_switchArtifactTab('mindmap');},1500);
     }
-  }catch(e){stepNames.forEach(s=>markStep(s,'fail'));out.innerHTML='<div class="error-card"><div class="err-title">演示失败</div><div class="err-detail">'+esc(e.message)+'</div></div>';}
+  }catch(e){stepNames.forEach(s=>markStep(s,'fail'));out.innerHTML='<div class="error-card"><div class="err-title">演示失败</div><div class="err-detail">'+esc(friendlyError(e))+'</div></div>';}
 };
 
 // ════════════ HELPERS ════════════
