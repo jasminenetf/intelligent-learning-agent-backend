@@ -1,0 +1,14 @@
+{
+  "name": "intelligent-learning-agent-e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:dashboard": "playwright test dashboard.spec.js",
+    "test:assistant": "playwright test assistant-flow.spec.js",
+    "test:resource": "playwright test resource-flow.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}
