@@ -258,7 +258,19 @@ def lecture_node(state: GraphState) -> dict:
         messages[0]["content"] += profile_hint
 
     provider = get_llm_provider()
-    resp = provider.generate(messages)
+    try:
+        import signal
+        resp = provider.generate(messages)
+    except Exception as e:
+        logger.warning("LLM generate failed: %s", e)
+        return {
+            "draft_answer": "",
+            "agent_trace": [_trace_entry(
+                "TutorAgent", "failed",
+                f"AI模型调用失败：{str(e)[:80]}"
+            )],
+        }
+
     answer = resp.content
 
     return {

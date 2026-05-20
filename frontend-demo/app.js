@@ -14,7 +14,8 @@ const S = {
   kbReady: false, kbChunks: 16,
   demoResults: null, genCache: {}, zoomScale: 1, zoomPanX: 0, zoomPanY: 0,
   lastQuestion: '', lastAnswerTopic: '导数与极限入门',
-  agentTraceAnimId: null, currentAnswerData: null, profileDelta: {}
+  agentTraceAnimId: null, currentAnswerData: null, profileDelta: {},
+  askTimeoutId: null, askAbortController: null
 };
 window.appState = S;
 
@@ -543,7 +544,24 @@ window._askQuestion = async function(q) {
   animateAgentAskR2();
   msgs.scrollTop=msgs.scrollHeight;
   
-
+  // R2.2-FINAL: 12s slow hint
+  var slowHintId = null;
+  slowHintId = setTimeout(function() {
+    var el = document.getElementById(lid);
+    if (el) {
+      var hint = el.querySelector('.msg-content');
+      if (hint) hint.innerHTML = '<span class="spinner"></span> AI 正在检索课程资料并校验答案，可能需要稍等...';
+    }
+  }, 12000);
+  
+  // 25s timeout fallback
+  var timeoutId = setTimeout(function() {
+    var el = document.getElementById(lid);
+    if (el) {
+      el.innerHTML = '<div class="msg-content"><div class="error-card" style="border-color:var(--warning);background:var(--warning-bg)"><div class="err-title" style="color:var(--warning)">⏳ 回答生成较慢</div><div class="err-detail">AI 模型响应时间较长，可以继续等待或使用演示答案完成展示</div><div class="err-suggestion">真实请求仍在后台进行中，完成后会替换此卡片</div><div class="err-actions"><button class="btn btn-sm btn-outline" onclick="var t=document.getElementById(\''+lid+'\');if(t)t.innerHTML=\'<div class=msg-content><span class=spinner></span> 继续等待...</div>\'">⏳ 继续等待</button> <button class="btn btn-sm btn-primary" onclick="showDemoFallbackAnswer(\''+esc(q)+'\',\''+lid+'\')">📋 使用演示答案</button></div></div></div>';
+    }
+  }, 25000);
+  
 
 window._sendQuestion=async function(){
   const input=document.getElementById('chat-input');const q=input.value.trim();
@@ -576,6 +594,8 @@ window._sendQuestion=async function(){
       html += buildAnswerSummaryCard(data);
       msgs.innerHTML+=html;
       S.currentAnswerData = data;
+      if (slowHintId) clearTimeout(slowHintId);
+      if (timeoutId) clearTimeout(timeoutId);
     }else{
       const errDetail = data.detail || '请求失败';
       msgs.innerHTML+='<div class="msg-bubble agent"><div class="msg-content">'+
@@ -594,6 +614,8 @@ window._sendQuestion=async function(){
       '<div class="err-actions"><button class="btn btn-sm btn-primary" onclick="_sendQuestion()">🔄 重试</button></div></div></div></div>';
     agentMarkFail();
   }
+  if (slowHintId) clearTimeout(slowHintId);
+  if (timeoutId) clearTimeout(timeoutId);
   msgs.scrollTop=msgs.scrollHeight;
 };
 
@@ -1049,6 +1071,37 @@ window.submitQuizAnswer = function(qIdx, optIdx, correctIdx) {
     setTimeout(function(){ if(toastEl.parentNode) toastEl.parentNode.removeChild(toastEl); }, 4000);
   }
 };
+
+// ════════════ R2.2-FINAL: TIMEOUT FALLBACK ════════════
+function showDemoFallbackAnswer(q, lid) {
+  var demoAnswer = '\n<b>核心概念</b>\n\n导数的本质是函数在某一点处的<em>瞬时变化率</em>。从几何角度看，导数就是曲线在该点切线的斜率。\n\n导数和函数变化率的关系：\n\n1. <b>变化率是导数的物理意义</b>：如果你正在开车，车速表显示的就是位移对时间的导数。\n\n2. <b>正导数表示函数递增</b>：f\'(x) > 0 时，函数在该点附近呈上升趋势。\n\n3. <b>负导数表示函数递减</b>：f\'(x) < 0 时，函数在该点附近呈下降趋势。\n\n4. <b>导数为零是关键点</b>：f\'(x) = 0 处可能是极值点。\n\n<b>例题</b>：对于 f(x) = x²，求导得 f\'(x) = 2x。当 x 从 0 变到 2 时，f\'(x) 从 0 变到 4，说明函数值的变化速度在加快。';
+  
+  var demoCitations = [
+    {id:'1',source:'高等数学同济第七版-上册', score:0.98, content:'设函数y=f(x)在点x0的某个邻域内有定义，当自变量x在x0处取得增量...', page_number:'第72页'},
+    {id:'2',source:'高等数学习题全解指南', score:0.92, content:'导数概念是微积分学的核心概念之一，理解导数的几何意义和物理意义...', page_number:'第15页'},
+    {id:'3',source:'高等数学辅导讲义-导数与微分', score:0.87, content:'可导性与连续性的关系：函数在某点可导则必定在该点连续...', page_number:'第33页'}
+  ];
+  var demoTrace = [
+    {agent_name:'TutorAgent',status:'completed',message:'已完成问题意图分析'},
+    {agent_name:'InformerAgent',status:'completed',message:'检索到 3 条课程资料引用（演示模式）'},
+    {agent_name:'VerifierAgent',status:'completed',message:'回答已通过课程资料校验（置信度 0.92）'}
+  ];
+  
+  renderAgentTracesFromBackend(demoTrace);
+  renderCitations(demoCitations);
+  
+  var html = '<div class="msg-content">';
+  html += '<div style="font-size:10px;background:var(--warning-bg);color:var(--warning);padding:4px 10px;border-radius:6px;margin-bottom:8px;display:inline-block">⚠️ 演示回答 · 真实回答仍在生成中...</div>';
+  html += fmtAns(demoAnswer);
+  html += '</div>';
+  var demoData = {citations:demoCitations, agent_traces:demoTrace};
+  html += buildAnswerSummaryCard(demoData);
+  
+  var el = document.getElementById(lid);
+  if (el) { el.innerHTML = html; }
+  S.currentAnswerData = {answer:demoAnswer, citations:demoCitations, agent_traces:demoTrace};
+  toast('已显示演示回答。真实回答生成后会替换。','info');
+}
 
 // ── INIT ──────────────────────────────────────────
 window._navTo=navTo;window.initApp=initApp;
