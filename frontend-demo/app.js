@@ -94,7 +94,7 @@ function updateTopbar(){
   else{u.innerHTML='<button class="btn btn-sm btn-primary" onclick="_loginDemo()">演示登录</button>';u.style.display='flex';if(lo)lo.style.display='none';}
   if(c)c.textContent=S.courseName||'未选择';
   if(b){b.className='topbar-badge '+(S.kbReady?'ok':'warn');b.textContent=S.kbReady?'知识库已就绪':'课程资料不足';}
-  if(sf)sf.innerHTML=S.token?'<span class="status-dot online"></span> API 正常':'<span class="status-dot offline"></span> 未连接';
+  if(sf)sf.innerHTML=S.token?'<span class="status-dot online"></span> 已登录':'<span class="status-dot offline"></span> 未登录';
 }
 
 window._toggleSidebar=function(){S.sidebarCollapsed=!S.sidebarCollapsed;const sb=document.getElementById('sidebar');sb.classList.toggle('collapsed',S.sidebarCollapsed);};
@@ -103,7 +103,7 @@ window._toggleSidebar=function(){S.sidebarCollapsed=!S.sidebarCollapsed;const sb
 async function initApp(){
   try{
     const{ok,data}=await api('/api/app/bootstrap');
-    if(!ok){showWelcome();return;}
+    if(!ok){S.user=null;setToken('');updateTopbar();showWelcome();return;}
     S.courses=data.courses||[];
     if(data.selected_course&&data.selected_course.id){S.courseId=data.selected_course.id;S.courseName=data.selected_course.name||'未选择';S.kbChunks=data.selected_course.chunks_count||0;S.kbReady=data.selected_course.has_knowledge_base||false;}
     if(data.user&&data.user.authenticated)S.user=data.user;
@@ -163,7 +163,12 @@ async function loadDashboard(){
   el.innerHTML='<div class="loading-block"><span class="spinner"></span> 加载...</div>';
   try{
     const{ok,data}=await api('/api/app/dashboard?course_id='+S.courseId);
-    if(!ok){el.innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败</p></div>';return;}
+    if(!ok){
+    var reason = (data.detail||data.error||'未知错误');
+    if(reason==='Not authenticated'||reason.includes('authenticated')){
+      reason='登录已失效，请重新登录演示账号'; setToken(''); S.user=null; updateTopbar();
+    }
+    el.innerHTML='<div class="error-card" style="max-width:500px;margin:20px auto"><div class="err-title">⚠ 数据看板加载失败</div><div class="err-detail">'+esc(reason)+'</div><div class="err-suggestion">请确认已登录演示账号</div><div class="err-actions"><button class="btn btn-sm btn-primary" onclick="_loginDemo()">🎯 演示登录</button><button class="btn btn-sm btn-outline" onclick="loadDashboard()">🔄 重试</button></div></div>';return;}
     const d=data,kb=d.knowledge_base||{},pf=d.profile||{};
     let h='<div class="grid grid-3">';
     h+='<div class="card grid-stat"><div class="val" style="color:var(--success)">✓</div><div class="lbl">AI模型已连接</div></div>';
@@ -174,7 +179,13 @@ async function loadDashboard(){
     if(pf&&pf.knowledge_level)h+='<div class="card"><div class="card-header"><h3>学习画像</h3></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px"><div><b>知识水平:</b> '+esc(pf.knowledge_level||'—')+'</div><div><b>认知风格:</b> '+esc(pf.cognitive_style||'—')+'</div><div><b>学习节奏:</b> '+esc(pf.pace_preference||'—')+'</div><div><b>专业:</b> '+esc(pf.major||'—')+'</div></div></div>';
     h+='<div class="card"><div class="card-header"><h3>快捷操作</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="navTo(\'assistant\')">💬 开始学习</button><button class="btn btn-secondary" onclick="navTo(\'generator\')">⚡ 生成资源</button><button class="btn btn-outline" onclick="_runFullDemo()">🎯 一键演示</button></div></div>';
     el.innerHTML=h;
-  }catch(e){el.innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败: '+esc(e.message)+'</p></div>';}
+  }catch(e){
+    var errMsg = (e.message||'');
+    if(errMsg==='Failed to fetch' || errMsg.includes('fetch')){
+      errMsg = '无法连接后端服务。请确认后端已启动（双击 run.bat 或执行 bash scripts/start_app.sh），然后刷新页面。';
+    }
+    el.innerHTML='<div class="error-card" style="max-width:500px;margin:20px auto"><div class="err-title">⚠ 数据看板加载失败</div><div class="err-detail">'+esc(errMsg)+'</div><div class="err-suggestion">检查后端服务是否运行在 http://127.0.0.1:8000</div><div class="err-actions"><button class="btn btn-sm btn-primary" onclick="loadDashboard()">🔄 重试</button><button class="btn btn-sm btn-outline" onclick="navTo(\'assistant\')">💬 去学习助手</button></div></div>';
+  }
 }
 
 // ════════════ MERMAID UTILITIES ════════════
@@ -983,7 +994,13 @@ async function loadCourses(){
     }
     h+='</div><div class="card"><div class="card-header"><h3>创建课程</h3></div><div class="form-group"><label>课程名称</label><input id="new-course-name" placeholder="例: 高等数学"></div><div class="form-group"><label>课程描述</label><input id="new-course-desc" placeholder="简要说明"></div><button class="btn btn-primary" onclick="_createCourse()">创建</button></div>';
     el.innerHTML=h;
-  }catch(e){el.innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><p>加载失败: '+esc(e.message)+'</p></div>';}
+  }catch(e){
+    var errMsg = (e.message||'');
+    if(errMsg==='Failed to fetch' || errMsg.includes('fetch')){
+      errMsg = '无法连接后端服务。请确认后端已启动（双击 run.bat 或执行 bash scripts/start_app.sh），然后刷新页面。';
+    }
+    el.innerHTML='<div class="error-card" style="max-width:500px;margin:20px auto"><div class="err-title">⚠ 数据看板加载失败</div><div class="err-detail">'+esc(errMsg)+'</div><div class="err-suggestion">检查后端服务是否运行在 http://127.0.0.1:8000</div><div class="err-actions"><button class="btn btn-sm btn-primary" onclick="loadDashboard()">🔄 重试</button><button class="btn btn-sm btn-outline" onclick="navTo(\'assistant\')">💬 去学习助手</button></div></div>';
+  }
 }
 
 window._selectCourse=function(id,name,chunks,hasKB){S.courseId=id;S.courseName=name;S.kbChunks=chunks||0;S.kbReady=!!hasKB;updateTopbar();loadCourses();toast(hasKB?'已选择: '+name+'（'+chunks+' 知识点）':'已选择: '+name+'（暂无课程资料）',hasKB?'success':'info');};
