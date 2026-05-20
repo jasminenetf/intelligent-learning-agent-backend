@@ -185,6 +185,50 @@ a{color:var(--primary);text-decoration:none}
 .agent-status-tag.failed{background:var(--danger-bg);color:var(--danger)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
+/* ── R2.2: Agent Card Breathing ─────────────────────────────────── */
+@keyframes agentPulse{0%{box-shadow:0 0 0 0 rgba(79,70,229,.7)}70%{box-shadow:0 0 0 10px rgba(79,70,229,0)}100%{box-shadow:0 0 0 0 rgba(79,70,229,0)}}
+.agent-trace-card.is-running{border-color:var(--primary-light)!important;animation:agentPulse 1.8s ease-in-out;background:var(--primary-bg)}
+.agent-trace-card.is-completed{border-color:var(--success)!important;transition:all .5s ease}
+.agent-trace-card.is-failed{border-color:var(--danger)!important;background:var(--danger-bg)}
+
+/* ── R2.2: Citation tag clickable ────────────────────────────────── */
+.citation-tag{display:inline-block;background:var(--primary-bg);color:var(--primary);font-size:10px;padding:0 5px;border-radius:4px;cursor:pointer;font-weight:600;text-decoration:none;transition:all var(--transition);vertical-align:super;margin:0 1px}
+.citation-tag:hover{background:var(--primary);color:#fff;transform:scale(1.1)}
+/* ── R2.2: Citation card pulse highlight ─────────────────────────── */
+@keyframes citePulse{0%{border-color:var(--primary);box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{border-color:var(--danger);box-shadow:0 0 0 6px rgba(239,68,68,.15)}100%{border-color:var(--primary);box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+.cite-card.active-pulse{animation:citePulse 1.5s ease-in-out 2;border-color:var(--primary)!important;box-shadow:0 0 0 3px var(--primary-bg)!important;z-index:2;position:relative}
+
+/* ── R2.2: Quiz interactive ─────────────────────────────────────── */
+.quiz-option-btn{display:block;width:100%;padding:8px 12px;margin:4px 0;border:1px solid var(--gray-200);border-radius:6px;font-size:12px;cursor:pointer;background:#fff;text-align:left;transition:all var(--transition)}
+.quiz-option-btn:hover{border-color:var(--primary);background:var(--primary-bg)}
+.quiz-option-btn.selected{border-color:var(--primary);background:var(--primary-bg);font-weight:600}
+.quiz-option-btn.correct{background:var(--success-bg)!important;border-color:var(--success)!important;color:var(--success);font-weight:700}
+.quiz-option-btn.wrong{background:var(--danger-bg)!important;border-color:var(--danger)!important;color:var(--danger)}
+.quiz-option-btn:disabled{cursor:not-allowed;opacity:.7}
+.quiz-feedback{margin-top:8px;padding:8px 12px;border-radius:6px;font-size:11px;display:none}
+.quiz-feedback.show{display:block}
+.quiz-feedback.correct-fb{background:var(--success-bg);color:var(--success);border:1px solid #a7f3d0}
+.quiz-feedback.wrong-fb{background:var(--danger-bg);color:var(--danger);border:1px solid #fecaca}
+.quiz-profile-toast{font-size:10px;color:var(--gray-500);margin-top:12px;padding:8px;background:var(--gray-50);border-radius:4px;text-align:center;animation:fadeIn .5s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── R2.2: Run Demo waterfall timeline ───────────────────────────── */
+.demo-timeline{display:flex;flex-direction:column;gap:4px}
+.demo-timeline-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;font-size:11px;transition:all .4s ease;border-left:3px solid transparent}
+.demo-timeline-item.waiting{background:var(--gray-50);color:var(--gray-400);border-left-color:var(--gray-200)}
+.demo-timeline-item.running{background:var(--primary-bg);color:var(--primary);border-left-color:var(--primary);font-weight:600}
+.demo-timeline-item.done{background:var(--success-bg);color:var(--success);border-left-color:var(--success)}
+.demo-timeline-item.fail{background:var(--danger-bg);color:var(--danger);border-left-color:var(--danger)}
+.demo-timeline-item .dt-icon{font-size:14px;width:20px;text-align:center}
+.demo-timeline-item .dt-label{flex:1}
+.demo-timeline-item .dt-time{font-size:9px;color:var(--gray-400)}
+.demo-timeline-item.running .dt-spinner{display:inline-block;width:10px;height:10px;border:2px solid var(--primary-bg);border-top-color:var(--primary);border-radius:50%;animation:spin .6s linear infinite;margin-right:6px;vertical-align:middle}
+
+/* ── R2.2: Resource generator progress bar ───────────────────────── */
+.gen-progress-bar-wrap{height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden;margin:8px 0}
+.gen-progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--primary-light));border-radius:4px;transition:width .5s ease;width:0%}
+.gen-progress-text{font-size:11px;color:var(--gray-500);text-align:center;margin-bottom:4px}
+
 /* ── Citations Panel ─────────────────────────────────────────── */
 .citations-panel{width:280px;min-width:240px;background:#fff;border-radius:var(--radius);border:1px solid var(--gray-200);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;flex-shrink:0}
 .citations-panel h4{font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.5px;margin:0}

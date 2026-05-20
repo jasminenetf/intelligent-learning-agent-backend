@@ -1,10 +1,11 @@
 /**
- * 智学·多智能体 — 学习工作台 Application Logic v3
- * R2.1: Artifacts产品化 — 思维导图重构、源码折叠、缩放、引用卡片、Agent过程、回答折叠
+ * 智学·多智能体 — 学习工作台 Application Logic v4
+ * R2.2: 多智能体动态联动
  */
 (function(){
 'use strict';
 
+// ════════════ GLOBAL STATE & EVENT BUS ════════════
 const S = {
   apiBase: 'http://127.0.0.1:8000',
   token: localStorage.getItem('hermes_token') || '',
@@ -12,8 +13,43 @@ const S = {
   courses: [], profile: null, sidebarCollapsed: false,
   kbReady: false, kbChunks: 16,
   demoResults: null, genCache: {}, zoomScale: 1, zoomPanX: 0, zoomPanY: 0,
-  lastQuestion: '', lastAnswerTopic: '导数与极限入门'
+  lastQuestion: '', lastAnswerTopic: '导数与极限入门',
+  agentTraceAnimId: null, currentAnswerData: null, profileDelta: {}
 };
+window.appState = S;
+
+const Bus = {};
+window._bus = Bus;
+Bus._listeners = {};
+Bus.on = function(evt, fn) { (Bus._listeners[evt]=Bus._listeners[evt]||[]).push(fn); };
+Bus.emit = function(evt, data) { (Bus._listeners[evt]||[]).forEach(function(fn){try{fn(data);}catch(e){console.warn('EventBus:',evt,e.message);}}); };
+
+Bus.on('agent:trace-update', function(traces) {
+  var trace = document.getElementById('agent-trace');
+  if (!trace) return;
+  var html = '';
+  (traces||[]).forEach(function(t) {
+    var iconMap = {'TutorAgent':'🧠','InformerAgent':'🔍','VerifierAgent':'✅','InsightAgent':'📊','PracticeAgent':'⚡','ProfileAgent':'👤'};
+    var icon = iconMap[t.agent_name] || iconMap[t.agent] || '🤖';
+    var name = t.agent_name || t.agent || 'Agent';
+    var st = t.status || 'pending';
+    var msg = t.message || t.detail || '';
+    html += '<div class="agent-trace-card'+(st==='running'?' is-running':'')+(st==='completed'?' is-completed':'')+(st==='failed'?' is-failed':'')+'"><div class="agent-icon">'+icon+'</div><div class="agent-info"><div class="agent-name">'+esc(name)+'</div>'+(msg?'<div class="agent-detail">'+esc(msg)+'</div>':'')+'</div><span class="agent-status-tag '+st+'">'+{pending:'待执行',running:'执行中',completed:'已完成',failed:'失败'}[st]+'</span></div>';
+  });
+  trace.innerHTML = html;
+});
+
+Bus.on('profile:updated', function(delta) {
+  S.profileDelta = delta || {};
+  var el = document.getElementById('profile-mini');
+  if (el && delta) {
+    var parts = [];
+    if (delta.knowledge_level) parts.push('水平: '+delta.knowledge_level);
+    if (delta.cognitive_style) parts.push('风格: '+delta.cognitive_style);
+    if (delta.last_topic) parts.push('主题: '+delta.last_topic);
+    if (parts.length) el.innerHTML = '<div style="font-size:11px;color:var(--success)">📊 '+parts.join(' | ')+'</div>';
+  }
+});
 
 const $ = (s,c) => (c||document).querySelector(s);
 const $$ = (s,c) => (c||document).querySelectorAll(s);
@@ -504,7 +540,7 @@ window._askQuestion = async function(q) {
   msgs.innerHTML+='<div class="msg-bubble agent" id="'+lid+'"><div class="msg-content"><span class="spinner"></span> AI 学习助手思考中...</div></div>';
   
   // Animate agent states
-  animateAgentAsk();
+  animateAgentAskR2();
   msgs.scrollTop=msgs.scrollHeight;
   
 
@@ -530,14 +566,16 @@ window._sendQuestion=async function(){
         html += answerHtml;
       }
       html += '</div>';
+      const agentTraces = data.agent_traces || [];
+      if(agentTraces.length){ renderAgentTracesFromBackend(agentTraces); }
+      else { updateAgentTrace(true, (data.citations||[]).length); }
       if(data.citations&&data.citations.length){
-        // Don't show citations inline, they go in the right panel
         renderCitations(data.citations);
-        updateAgentTrace(true, data.citations.length);
-      } else {
-        updateAgentTrace(true, 0);
-      }
+      } else { updateAgentTrace(true, 0); }
+      if(data.profile_delta && Object.keys(data.profile_delta).length){ Bus.emit('profile:updated', data.profile_delta); }
+      html += buildAnswerSummaryCard(data);
       msgs.innerHTML+=html;
+      S.currentAnswerData = data;
     }else{
       const errDetail = data.detail || '请求失败';
       msgs.innerHTML+='<div class="msg-bubble agent"><div class="msg-content">'+
@@ -545,6 +583,7 @@ window._sendQuestion=async function(){
         '<div class="err-detail">'+esc(errDetail)+'</div>'+
         '<div class="err-suggestion">建议：检查网络连接后重试，或尝试其他问题</div>'+
         '<div class="err-actions"><button class="btn btn-sm btn-primary" onclick="_sendQuestion()">🔄 重试</button></div></div></div></div>';
+      agentMarkFail();
     }
   }catch(e){
     const le=document.getElementById(lid);if(le)le.remove();
@@ -553,10 +592,27 @@ window._sendQuestion=async function(){
       '<div class="err-detail">无法连接到学习服务</div>'+
       '<div class="err-suggestion">建议：检查后端服务是否正在运行，然后重试</div>'+
       '<div class="err-actions"><button class="btn btn-sm btn-primary" onclick="_sendQuestion()">🔄 重试</button></div></div></div></div>';
+    agentMarkFail();
   }
   msgs.scrollTop=msgs.scrollHeight;
 };
 
+
+// ════════ R2.2 AGENT ANIMATION (EventBus) ═══════=
+function animateAgentAskR2() {
+  var traces = [
+    {agent_name:"TutorAgent",status:"running",message:"正在拆解问题，分配任务给多智能体..."},
+    {agent_name:"ProfileAgent",status:"pending",message:""},
+    {agent_name:"InformerAgent",status:"pending",message:""},
+    {agent_name:"VerifierAgent",status:"pending",message:""},
+    {agent_name:"PracticeAgent",status:"pending",message:""}
+  ];
+  Bus.emit("agent:trace-update", traces);
+  setTimeout(function(){ Bus.emit("agent:trace-update", [{agent_name:"TutorAgent",status:"completed",message:"任务已分配"},{agent_name:"ProfileAgent",status:"running",message:"正在分析学生认知特征..."},{agent_name:"InformerAgent",status:"pending",message:""},{agent_name:"VerifierAgent",status:"pending",message:""},{agent_name:"PracticeAgent",status:"pending",message:""}]); }, 600);
+  setTimeout(function(){ Bus.emit("agent:trace-update", [{agent_name:"TutorAgent",status:"completed",message:"任务已分配"},{agent_name:"ProfileAgent",status:"completed",message:"画像已提取"},{agent_name:"InformerAgent",status:"running",message:"正在检索高等数学知识库..."},{agent_name:"VerifierAgent",status:"pending",message:""},{agent_name:"PracticeAgent",status:"pending",message:""}]); }, 1200);
+  setTimeout(function(){ Bus.emit("agent:trace-update", [{agent_name:"TutorAgent",status:"completed",message:"任务已分配"},{agent_name:"ProfileAgent",status:"completed",message:"画像已提取"},{agent_name:"InformerAgent",status:"completed",message:"检索完成"},{agent_name:"VerifierAgent",status:"running",message:"正在交叉验证回答，计算置信度..."},{agent_name:"PracticeAgent",status:"pending",message:""}]); }, 2000);
+}
+function renderAgentTracesFromBackend(traces) { Bus.emit("agent:trace-update", traces); }
 // ════════ AGENT ANIMATION ════════
 function animateAgentAsk() {
   const trace = document.getElementById('agent-trace');
@@ -678,6 +734,17 @@ function renderArtifact(type,data){
   _switchArtifactTab(type);
 }
 
+window.highlightSourceCard = function(id) {
+  var cards = document.querySelectorAll('.cite-card');
+  cards.forEach(function(c) { c.classList.remove('active-pulse'); });
+  var card = document.getElementById('cite-card-'+id);
+  if (card) {
+    card.classList.add('active-pulse');
+    card.scrollIntoView({behavior:'smooth',block:'center'});
+    setTimeout(function(){ card.classList.remove('active-pulse'); }, 3000);
+  }
+};
+
 window.highlightCite = function(idx) {
   // Highlight citation card
   $$('.cite-card').forEach(c => c.style.borderColor = '');
@@ -758,7 +825,7 @@ function initGenerator(){
   h+='<div class="card"><div class="card-header"><h3>✏️ 输入学习主题</h3></div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="gen-topic-input" placeholder="输入学习主题..." style="flex:1;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px" value="导数与极限入门"><button class="btn btn-primary" onclick="_genAllResources()">⚡ 生成全部 5 类资源</button></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'gen-topic-input\').value=\'导数定义与几何意义\'">导数定义</button><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'gen-topic-input\').value=\'极限运算法则\'">极限运算法则</button><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'gen-topic-input\').value=\'连续函数性质\'">连续函数</button></div></div>';
   const resources=[{id:'lecture_doc',icon:'📄',name:'讲义文档',desc:'个性化AI讲义'},{id:'mindmap',icon:'🧠',name:'思维导图',desc:'概念关系可视化'},{id:'quiz',icon:'📝',name:'自适应测验',desc:'知识点自测'},{id:'ppt',icon:'📊',name:'PPT课件',desc:'可下载PPTX'},{id:'study_plan',icon:'🗺️',name:'学习路径',desc:'个性化学习计划'},{id:'video',icon:'🎬',name:'数字人视频',desc:'待开发',beta:true}];
   h+='<div class="resource-cards">';resources.forEach(r=>{h+='<div class="res-card" id="rcard-'+r.id+'" onclick="'+(r.beta?'':'_genSingle(\''+r.id+'\')')+'"><div class="res-icon">'+r.icon+'</div><div class="res-name">'+r.name+'</div><div class="res-desc">'+r.desc+'</div><span class="res-status ready" id="rstatus-'+r.id+'">'+(r.beta?'待开发':'可生成')+'</span></div>';});h+='</div>';
-  h+='<div class="card" id="gen-progress-card" style="display:none"><div class="card-header"><h3>⚙️ 生成进度</h3></div><div class="progress-steps" id="gen-progress-steps"><div class="progress-step" id="gstep-0">分析画像</div><div class="progress-step" id="gstep-1">检索知识</div><div class="progress-step" id="gstep-2">生成路径</div><div class="progress-step" id="gstep-3">生成导图</div><div class="progress-step" id="gstep-4">生成测验</div><div class="progress-step" id="gstep-5">生成讲义</div><div class="progress-step" id="gstep-6">生成PPT</div></div></div>';
+  h+='<div class="card" id="gen-progress-card" style="display:none"><div class="card-header"><h3>⚙️ 生成进度</h3></div><div class="gen-progress-text" id="gen-progress-text">准备中...</div><div class="gen-progress-bar-wrap"><div class="gen-progress-bar-fill" id="gen-progress-bar"></div></div><div class="progress-steps" id="gen-progress-steps"><div class="progress-step" id="gstep-0">分析画像</div><div class="progress-step" id="gstep-1">检索知识</div><div class="progress-step" id="gstep-2">生成路径</div><div class="progress-step" id="gstep-3">生成导图</div><div class="progress-step" id="gstep-4">生成测验</div><div class="progress-step" id="gstep-5">生成讲义</div><div class="progress-step" id="gstep-6">生成PPT</div></div></div>';
   h+='<div class="card"><div class="card-header"><h3>📋 生成结果</h3></div><div id="gen-result-summary" class="result-summary" style="display:none"><div class="rs-item"><div class="rs-val" id="rs-topic">—</div><div class="rs-lbl">当前主题</div></div><div class="rs-divider"></div><div class="rs-item"><div class="rs-val" id="rs-count">0</div><div class="rs-lbl">已生成资源</div></div><div class="rs-divider"></div><div class="rs-item"><div class="rs-val" id="rs-cites">0</div><div class="rs-lbl">引用数量</div></div><div class="rs-divider"></div><div class="rs-item"><div class="rs-val" id="rs-ppt">—</div><div class="rs-lbl">PPT状态</div></div></div><div class="artifacts-tabs" id="gen-result-tabs"><div class="artifacts-tab active" onclick="_switchGenTab(\'mindmap\')">思维导图</div><div class="artifacts-tab" onclick="_switchGenTab(\'lecture\')">讲解文档</div><div class="artifacts-tab" onclick="_switchGenTab(\'ppt\')">PPT预览</div><div class="artifacts-tab" onclick="_switchGenTab(\'quiz\')">练习题</div><div class="artifacts-tab" onclick="_switchGenTab(\'study_plan\')">学习路径</div></div><div id="gen-results" style="min-height:440px"><div class="artifact-empty"><div class="ae-icon">🧠</div><div class="ae-title">思维导图</div><div class="ae-hint">点击上方资源卡片或"生成全部5类资源"按钮开始</div><button class="btn btn-primary btn-sm ae-btn" onclick="_genSingle(\'mindmap\')">⚡ 立即生成</button></div></div></div>';
   el.innerHTML=h;
   S.genCache={};
@@ -821,12 +888,19 @@ function updateGenSummary() {
 window._genAllResources=async function(){
   const types=['study_plan','mindmap','quiz','lecture_doc','ppt'];
   const pc=$('#gen-progress-card');if(pc)pc.style.display='block';
+  var totalSteps=types.length;
+  var progressBar=document.getElementById('gen-progress-bar');
+  var progressText=document.getElementById('gen-progress-text');
   for(let i=0;i<types.length;i++){
-    const gs=document.getElementById('gstep-'+(i+2));if(gs){gs.className='progress-step active';gs.textContent='⏳ '+['生成路径','生成导图','生成测验','生成讲义','生成PPT'][i];}
+    var gs=document.getElementById('gstep-'+(i+2));if(gs){gs.className='progress-step active';gs.textContent='⏳ '+['生成路径','生成导图','生成测验','生成讲义','生成PPT'][i];}
     if(i===0){document.getElementById('gstep-0')&&(document.getElementById('gstep-0').className='progress-step done');document.getElementById('gstep-1')&&(document.getElementById('gstep-1').className='progress-step done');}
+    if(progressBar)progressBar.style.width=Math.round((i+1)/totalSteps*100)+'%';
+    if(progressText)progressText.textContent='正在生成: '+['学习路径','思维导图','测验','讲义','PPT'][i]+' ('+(i+1)+'/'+totalSteps+')';
     await _genSingle(types[i]);
     if(gs){gs.className='progress-step done';gs.textContent='✅ '+['生成路径','生成导图','生成测验','生成讲义','生成PPT'][i];}
   }
+  if(progressBar)progressBar.style.width='100%';
+  if(progressText)progressText.textContent='✅ 全部 5 类资源生成完毕！';
   if(pc)setTimeout(()=>{pc.style.display='none';},3000);
   const cached = S.genCache;
   const c = Object.keys(cached).length;
@@ -909,8 +983,8 @@ window._runFullDemo=async function(){
   if(!S.token){toast('请先登录','error');return;}
   const stepNames=['检查模型','准备课程','分析画像','资料检索','生成回答','生成导图','生成测验','生成讲义','生成PPT','完成展示'];
   navTo('dashboard');const el=document.getElementById('page-dashboard');
-  el.innerHTML='<div class="card"><div class="card-header"><h3>🎯 全流程演示</h3></div><div class="demo-steps" id="demo-steps">'+stepNames.map(s=>'<div class="demo-step" id="dstep-'+s+'">'+s+'</div>').join('')+'</div><div id="demo-output" style="margin-top:12px;font-size:12px"></div></div>';
-  const markStep=(name,status)=>{const s=document.getElementById('dstep-'+name);if(s)s.className='demo-step '+status;};
+  el.innerHTML='<div class="card"><div class="card-header"><h3>🎯 全流程演示 — 多智能体流水席</h3></div><div class="demo-timeline" id="demo-steps">'+stepNames.map(s=>'<div class="demo-timeline-item waiting" id="dstep-'+s+'"><span class="dt-icon">⏳</span><span class="dt-label">'+s+'</span><span class="dt-time"></span></div>').join('')+'</div><div id="demo-output" style="margin-top:12px;font-size:12px"></div></div>';
+  const markStep=(name,status)=>{const s=document.getElementById('dstep-'+name);if(s){s.className='demo-timeline-item '+status;var icon=s.querySelector('.dt-icon');if(icon){icon.textContent=status==='running'?'🔄':status==='done'?'✅':status==='fail'?'❌':'⏳';}}};
   const delay=ms=>new Promise(r=>setTimeout(r,ms));
   const out=$('#demo-output');
 
@@ -947,7 +1021,34 @@ window._runFullDemo=async function(){
 };
 
 // ════════════ HELPERS ════════════
-function fmtAns(t){if(!t)return'';return esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n---\n/g,'<hr style="border:none;border-top:1px dashed var(--gray-200);margin:8px 0">').replace(/\n/g,'<br>');}
+function fmtAns(t){if(!t)return'';var s=esc(t);s=s.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');s=s.replace(/\n---\n/g,'<hr style="border:none;border-top:1px dashed var(--gray-200);margin:8px 0">');s=s.replace(/\[cite:\s*(\d+)\]/gi,'<span class="citation-tag" onclick="highlightSourceCard(\'$1\')" title="点击查看引用来源">[$1]</span>');s=s.replace(/\n/g,'<br>');return s;}
+
+// ════════════ R2.2 QUIZ INTERACTIVE ════════════
+window.submitQuizAnswer = function(qIdx, optIdx, correctIdx) {
+  var sel = '#quiz-'+qIdx+' .quiz-option-btn';
+  var btns = document.querySelectorAll(sel);
+  var fb = document.getElementById('quiz-fb-'+qIdx);
+  var expl = document.getElementById('quiz-expl-'+qIdx);
+  btns.forEach(function(b,i) {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add('correct');
+    else if (i === optIdx && i !== correctIdx) b.classList.add('wrong');
+  });
+  if (fb) {
+    fb.className = 'quiz-feedback '+(optIdx===correctIdx?'correct-fb':'wrong-fb')+' show';
+    fb.innerHTML = optIdx===correctIdx?'✅ 回答正确！':'❌ 回答错误，正确答案是 '+String.fromCharCode(65+correctIdx);
+    fb.style.display='block';
+  }
+  if (expl) { expl.className = 'quiz-feedback show'; expl.style.display='block'; }
+  var qEl = document.getElementById('quiz-'+qIdx);
+  if (qEl) {
+    var toastEl = document.createElement('div');
+    toastEl.className = 'quiz-profile-toast';
+    toastEl.textContent = '📊 答题行为已捕获，正在隐式修正您的知识短板画像参数...';
+    qEl.appendChild(toastEl);
+    setTimeout(function(){ if(toastEl.parentNode) toastEl.parentNode.removeChild(toastEl); }, 4000);
+  }
+};
 
 // ── INIT ──────────────────────────────────────────
 window._navTo=navTo;window.initApp=initApp;

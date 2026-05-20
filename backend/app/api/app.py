@@ -387,34 +387,69 @@ def api_app_ask(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    """Unified Q&A — wraps RAG search + LLM answer."""
+    """Unified Q&A — multi-agent graph pipeline with agent traces."""
     if not settings.DEEPSEEK_API_KEY:
         raise HTTPException(status_code=400, detail=ERR_NOT_CONFIGURED)
 
+    result = None
+    _course_name = ""
+
+    # Try LangGraph multi-agent pipeline first
     try:
-        result = answer_course_question(
-            body.course_id, body.question, body.top_k, session, user
+        from app.services.agent_graph import run_tutor_graph
+        from app.models.course import Course
+        course = session.get(Course, body.course_id)
+        _course_name = course.name if course else ""
+
+        result = run_tutor_graph(
+            body.course_id, _course_name, body.question,
+            body.top_k, session, user
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"{ERR_LLM_FAILED}: {e}")
+        logger.exception("Agent graph failed, falling back to qa_service")
+        # Fallback to simpler pipeline
+        try:
+            result = answer_course_question(
+                body.course_id, body.question, body.top_k, session, user
+            )
+            if "error" in result:
+                raise HTTPException(status_code=400, detail=result["error"])
+            return {
+                "ok": True,
+                "answer": result.get("answer", ""),
+                "course_name": result.get("course_name", ""),
+                "provider": result.get("provider", "unknown"),
+                "model": result.get("model", "unknown"),
+                "citations": result.get("citations", []),
+                "retrieved_chunks": result.get("retrieved_chunks", []),
+                "used_rag": bool(result.get("citations")),
+                "agent_traces": [],
+                "status": "ok",
+            }
+        except Exception as e2:
+            raise HTTPException(status_code=500, detail=f"{ERR_LLM_FAILED}: {e2}")
 
-    if "error" in result:
-        code = 404 if "not found" in result["error"] else 400
-        raise HTTPException(status_code=code, detail=result["error"])
+    if not result:
+        raise HTTPException(status_code=500, detail=f"{ERR_LLM_FAILED}: no result produced")
+
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result["error"])
 
     citations = result.get("citations", [])
-    used_rag = len(citations) > 0
 
     return {
         "ok": True,
         "answer": result.get("answer", ""),
-        "course_name": result.get("course_name", ""),
-        "provider": result.get("provider", "unknown"),
-        "model": result.get("model", "unknown"),
+        "course_name": _course_name,
         "citations": citations,
-        "retrieved_chunks": result.get("retrieved_chunks", []),
-        "used_rag": used_rag,
-        "status": "ok",
+        "agent_traces": result.get("agent_traces", []),
+        "profile_delta": result.get("profile_delta", {}),
+        "student_profile": result.get("student_profile", {}),
+        "verifier_score": result.get("verifier_score", 0.0),
+        "generated_artifacts": result.get("generated_artifacts", {}),
+        "retrieved_chunks": [],
+        "used_rag": len(citations) > 0,
+        "status": result.get("status", "ok"),
     }
 
 
