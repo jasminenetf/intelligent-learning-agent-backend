@@ -21,6 +21,7 @@ from app.services.rag_service import search_course
 
 logger = logging.getLogger(__name__)
 MAX_RETRY = 2
+MAX_TUTOR_TOP_K = 10
 
 # ═══════════════════════════════════════════════════════════════════════
 # GraphState — typed shared state across all nodes
