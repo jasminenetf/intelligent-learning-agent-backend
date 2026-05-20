@@ -6,6 +6,7 @@
 <title>智学·多智能体 — 学习工作台</title>
 <link rel="stylesheet" href="app.css">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div id="toast" class="toast" style="display:none"></div>
@@ -109,7 +110,8 @@
         </div>
         <div class="profile-mini" id="profile-mini" style="margin-top:12px">
           <h4>🎓 学习画像</h4>
-          <p style="font-size:11px;color:var(--gray-400)">尚未提取画像</p>
+          <canvas id="profileRadarChart" width="240" height="240" style="max-width:100%;margin:8px 0;display:none"></canvas>
+          <p style="font-size:11px;color:var(--gray-400)" id="profile-text">尚未提取画像</p>
         </div>
       </div>
     </div>

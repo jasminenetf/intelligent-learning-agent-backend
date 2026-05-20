@@ -42,14 +42,15 @@ Bus.on('agent:trace-update', function(traces) {
 
 Bus.on('profile:updated', function(delta) {
   S.profileDelta = delta || {};
-  var el = document.getElementById('profile-mini');
-  if (el && delta) {
+  var txt = document.getElementById('profile-text');
+  if (delta) {
     var parts = [];
     if (delta.knowledge_level) parts.push('水平: '+delta.knowledge_level);
     if (delta.cognitive_style) parts.push('风格: '+delta.cognitive_style);
     if (delta.last_topic) parts.push('主题: '+delta.last_topic);
-    if (parts.length) el.innerHTML = '<div style="font-size:11px;color:var(--success)">📊 '+parts.join(' | ')+'</div>';
+    if (txt && parts.length) txt.innerHTML = '📊 '+parts.join(' | ');
   }
+  updateProfileRadar(delta);
 });
 
 const $ = (s,c) => (c||document).querySelector(s);
@@ -499,11 +500,7 @@ function fillDefaultArtifacts(){
   const aq=$('#artifact-quiz');
   if(aq&&(!aq.textContent.trim()||aq.querySelector('.empty-state'))){
     aq.innerHTML='<div style="padding:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><b style="font-size:14px">📝 练习题库</b><span style="font-size:10px;color:var(--gray-400);margin-left:8px">示例预览</span></div><button class="btn btn-sm btn-primary" onclick="_quickGenerate(\'quiz\')">🔄 生成个性化测验</button></div>'+
-    DEFAULT_QUIZ.map((it,i)=>'<div class="quiz-item" style="cursor:pointer" onclick="this.classList.toggle(\'expanded\')"><div class="q-text">Q'+(i+1)+'. '+esc(it.question)+' <span style="font-size:10px;color:var(--gray-400)">'+(it.difficulty||'')+'</span> <span style="font-size:10px;background:var(--primary-bg);padding:1px 6px;border-radius:4px">'+(it.tags||[]).join(',')+'</span></div>'+
-    it.options.map((o,j)=>
-      '<div class="q-option'+(j===it.answer?' correct':'')+'" style="display:'+(j===it.answer?'block':'none')+'">'+String.fromCharCode(65+j)+'. '+esc(o)+' ✓</div>'
-    ).join('')+
-    '<div class="q-explanation" style="display:none">💡 '+esc(it.explanation||'')+'</div></div>').join('')+
+    '<div style="padding:8px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div><b style="font-size:14px">📝 练习题库</b><span style="font-size:10px;color:var(--gray-400);margin-left:8px">示例预览</span></div><button class="btn btn-sm btn-primary" onclick="_quickGenerate(\'quiz\')">🔄 生成个性化测验</button></div>'+renderInteractiveQuiz(DEFAULT_QUIZ,'default')+'<p style="font-size:10px;color:var(--gray-400);margin-top:4px;padding:0 8px">📌 点击选项作答 · 生成后替换为个性化测验</p></div>'+
     '<p style="font-size:10px;color:var(--gray-400);margin-top:8px">📌 点击题目显示答案解析 · 生成后替换为个性化测验</p></div>';
   }
   // Lecture — markdown rendered with TOC
@@ -733,11 +730,7 @@ function renderArtifact(type,data){
     setTimeout(setupMindmapDrag, 500);
   } else if(type==='quiz'&&data.items){
     panel.innerHTML='<div style="padding:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><b style="font-size:14px">📝 练习题库</b><span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 8px;border-radius:10px;margin-left:8px">AI 已生成</span></div><button class="btn btn-sm btn-outline" onclick="_quickGenerate(\'quiz\')">🔄 重新生成</button></div>'+
-    data.items.map((it,i)=>'<div class="quiz-item" onclick="this.classList.toggle(\'expanded\');const ex=this.querySelector(\'.q-explanation\');if(ex)ex.style.display=ex.style.display===\'none\'?\'block\':\'none\';const ops=this.querySelectorAll(\'.q-option\');ops.forEach(o=>o.style.display=o.style.display===\'none\'?\'block\':\'none\')"><div class="q-text">Q'+(i+1)+'. '+esc(it.question)+' '+(it.difficulty?'<span style="font-size:10px;color:var(--gray-400)">'+(it.difficulty==='basic'?'基础':it.difficulty==='intermediate'?'进阶':'挑战')+'</span>':'')+'</div>'+
-    it.options.map((o,j)=>
-      '<div class="q-option'+(j===it.answer?' correct':'')+'" style="display:none">'+String.fromCharCode(65+j)+'. '+esc(o)+(j===it.answer?' ✓':'')+'</div>'
-    ).join('')+
-    '<div class="q-explanation" style="display:none">💡 '+esc(it.explanation||'')+'</div></div>').join('')+'</div>';
+    '<div style="padding:8px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div><b style="font-size:14px">📝 练习题库</b><span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 8px;border-radius:10px;margin-left:8px">AI 已生成</span></div><div style="display:flex;gap:6px"><button class="btn btn-sm btn-outline" onclick="_quickGenerate(\'quiz\')">🔄 重新生成</button><button class="btn btn-sm btn-outline" onclick="resetAllQuiz(\'gen\')">🔄 重做全部</button></div></div>'+renderInteractiveQuiz(data.items,'gen')+'</div>'+'</div>';
   } else if(type==='lecture'&&data.content){
     const content = data.content || '';
     panel.innerHTML='<div style="padding:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><b style="font-size:14px">📖 讲义文档</b><span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 8px;border-radius:10px;margin-left:8px">AI 已生成</span></div><div style="display:flex;gap:6px"><button class="btn btn-sm btn-outline" onclick="_quickGenerate(\'lecture_doc\')">🔄 重新生成</button><button class="btn btn-sm btn-outline" onclick="copyLectureContent()">📄 复制文档</button></div></div>'+
@@ -1102,6 +1095,149 @@ function showDemoFallbackAnswer(q, lid) {
   S.currentAnswerData = {answer:demoAnswer, citations:demoCitations, agent_traces:demoTrace};
   toast('已显示演示回答。真实回答生成后会替换。','info');
 }
+
+// ════════════ R2.3-Lite: RADAR CHART ════════════
+var _profileRadarChart = null;
+function updateProfileRadar(profile) {
+  var canvas = document.getElementById('profileRadarChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  canvas.style.display = 'block';
+  var ctx = canvas.getContext('2d');
+  var data = profile || S.profileDelta || {};
+
+  var labels = ['知识基础','认知风格','学习目标','学习节奏','知识短板','资源偏好','元学习','学习动机'];
+  var values = [
+    data.knowledge_level === 'advanced' ? 85 : data.knowledge_level === 'intermediate' ? 60 : data.knowledge_level === 'beginner' ? 30 : 45,
+    data.cognitive_style === 'visual' ? 80 : data.cognitive_style === 'logical' ? 70 : data.cognitive_style === 'practice_oriented' ? 60 : 45,
+    data.learning_goal === '考研复习' ? 90 : 55,
+    data.pace_preference === 'fast' ? 75 : data.pace_preference === 'slow' ? 35 : 50,
+    data.detected_weakness ? 30 : 65,
+    data.resource_preference ? 70 : 55,
+    60, 65
+  ];
+
+  if (_profileRadarChart) { _profileRadarChart.destroy(); _profileRadarChart = null; }
+
+  _profileRadarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '学习画像',
+        data: values,
+        backgroundColor: 'rgba(79,70,229,0.12)',
+        borderColor: 'rgba(79,70,229,0.8)',
+        borderWidth: 2,
+        pointBackgroundColor: '#4f46e5',
+        pointRadius: 3,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      animation: { duration: 600 },
+      scales: { r: { beginAtZero: true, max: 100, ticks: { stepSize: 20, font: { size: 8 } }, pointLabels: { font: { size: 8 } } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+// ════════════ R2.3-Lite: QUIZ INTERACTIVE ════════════
+function renderInteractiveQuiz(items, prefix) {
+  var out = '<div style="padding:8px"><div id="quiz-score-'+prefix+'" style="font-size:11px;color:var(--gray-500);margin-bottom:8px">已答 0 / '+items.length+' 题 | 正确率 —%</div>';
+  items.forEach(function(it, i) {
+    var question = it.question || it.stem || it.title || '';
+    var options = it.options || it.choices || [];
+    var answer = it.answer !== undefined ? it.answer : (it.correct_answer !== undefined ? it.correct_answer : (it.correct !== undefined ? it.correct : -1));
+    var explanation = it.explanation || it.analysis || '';
+    var difficulty = it.difficulty || it.level || '';
+    var concept = it.knowledge_point || it.concept || it.topic || '';
+    var diffLabel = difficulty === 'basic' ? '基础' : difficulty === 'intermediate' ? '进阶' : difficulty === 'advanced' ? '挑战' : '';
+    // Normalize answer index
+    var correctIdx = -1;
+    if (typeof answer === 'number') { correctIdx = answer; }
+    else if (typeof answer === 'string') { correctIdx = answer.toUpperCase().charCodeAt(0) - 65; }
+
+    out += '<div class="quiz-item" id="'+prefix+'-'+i+'"><div class="q-text">Q'+(i+1)+'. '+esc(question)+
+      (diffLabel?' <span style="font-size:10px;color:var(--gray-400)">'+diffLabel+'</span>':'')+
+      (concept?' <span style="font-size:10px;background:var(--primary-bg);padding:1px 6px;border-radius:4px">'+esc(concept)+'</span>':'')+
+      '</div>';
+    options.forEach(function(o, j) {
+      out += '<button class="quiz-option-btn" onclick="handleQuizOption(\''+prefix+'\','+i+','+j+','+correctIdx+',\''+esc(concept||question.substring(0,20))+'\')">'+String.fromCharCode(65+j)+'. '+esc(o)+'</button>';
+    });
+    out += '<div class="quiz-feedback" id="'+prefix+'-fb-'+i+'"></div>';
+    out += '<div class="quiz-feedback" id="'+prefix+'-expl-'+i+'">💡 '+esc(explanation)+'</div></div>';
+  });
+  out += '</div>';
+  return out;
+}
+
+window.handleQuizOption = function(prefix, qIdx, optIdx, correctIdx, concept) {
+  var btns = document.querySelectorAll('#'+prefix+'-'+qIdx+' .quiz-option-btn');
+  var fb = document.getElementById(prefix+'-fb-'+qIdx);
+  var expl = document.getElementById(prefix+'-expl-'+qIdx);
+  var isCorrect = optIdx === correctIdx;
+
+  btns.forEach(function(b, i) {
+    b.disabled = true;
+    b.classList.remove('selected');
+    if (i === correctIdx) b.classList.add('correct');
+    else if (!isCorrect && i === optIdx) b.classList.add('wrong');
+  });
+
+  if (fb) {
+    fb.className = 'quiz-feedback '+(isCorrect?'correct-fb':'wrong-fb')+' show';
+    fb.innerHTML = isCorrect ? '✅ 回答正确！' : '❌ 回答错误，正确答案是 '+String.fromCharCode(65+correctIdx);
+    fb.style.display = 'block';
+  }
+  if (expl) { expl.className = 'quiz-feedback show'; expl.style.display = 'block'; }
+
+  // Update score
+  updateQuizScore(prefix);
+
+  // R2.3-Lite: light tip for wrong answers
+  if (!isCorrect && concept) {
+    var tip = document.createElement('div');
+    tip.className = 'quiz-profile-toast';
+    tip.textContent = '📌 该题暴露出对「'+concept+'」的薄弱理解，建议回到学习路径复习相关步骤。';
+    var qEl = document.getElementById(prefix+'-'+qIdx);
+    if (qEl) qEl.appendChild(tip);
+  }
+};
+
+function updateQuizScore(prefix) {
+  var items = document.querySelectorAll('[id^="'+prefix+'-"] .quiz-option-btn');
+  var quizItems = document.querySelectorAll('[id^="'+prefix+'-"].quiz-item');
+  var total = quizItems.length;
+  var answered = 0, correct = 0;
+  quizItems.forEach(function(item) {
+    var btns = item.querySelectorAll('.quiz-option-btn');
+    var anyDisabled = false, anyCorrect = false;
+    btns.forEach(function(b) {
+      if (b.disabled) anyDisabled = true;
+      if (b.classList.contains('correct') && b.disabled) anyCorrect = true;
+    });
+    if (anyDisabled) answered++;
+    if (anyCorrect) correct++;
+  });
+  var pct = answered > 0 ? Math.round(correct/answered*100) : 0;
+  var scoreEl = document.getElementById('quiz-score-'+prefix);
+  if (scoreEl) scoreEl.innerHTML = '已答 '+answered+' / '+total+' 题 | 正确 '+correct+' 题 | 正确率 '+pct+'%';
+}
+
+window.resetAllQuiz = function(prefix) {
+  var items = document.querySelectorAll('[id^="'+prefix+'-"].quiz-item');
+  items.forEach(function(item) {
+    var btns = item.querySelectorAll('.quiz-option-btn');
+    btns.forEach(function(b) { b.disabled = false; b.classList.remove('correct','wrong','selected'); });
+    var fb = item.querySelector('.quiz-feedback');
+    if (fb) { fb.className = 'quiz-feedback'; fb.style.display = 'none'; fb.innerHTML = ''; }
+    var expl = item.querySelectorAll('.quiz-feedback');
+    expl.forEach(function(e) { if (e.id && e.id.indexOf('-expl-') >= 0) { e.className = 'quiz-feedback'; e.style.display = 'none'; } });
+  });
+  var scoreEl = document.getElementById('quiz-score-'+prefix);
+  if (scoreEl) scoreEl.innerHTML = '已答 0 / '+items.length+' 题 | 正确率 —%';
+};
 
 // ── INIT ──────────────────────────────────────────
 window._navTo=navTo;window.initApp=initApp;
