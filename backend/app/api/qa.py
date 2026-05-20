@@ -33,7 +33,7 @@ def api_llm_status(user: User = Depends(get_current_user)):
         provider=provider.provider,
         model=provider.model,
         is_mock=(provider.provider == "mock"),
-        spark_configured=bool(settings.SPARK_API_KEY),
+        spark_configured=bool(settings.SPARK_API_PASSWORD or settings.SPARK_API_KEY),
         deepseek_configured=bool(settings.DEEPSEEK_API_KEY),
         embedding_provider=settings.EMBEDDING_PROVIDER,
         embedding_is_mock=(settings.EMBEDDING_PROVIDER == "hash_mock"),

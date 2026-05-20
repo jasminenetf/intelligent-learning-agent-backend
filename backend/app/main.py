@@ -17,6 +17,7 @@ from app.api.qa import router as qa_router
 from app.api.rag import router as rag_router
 from app.api.resources import router as resources_router
 from app.api.app import router as app_router
+from app.api.avatar import router as avatar_router
 from app.api.settings import router as settings_router
 from app.api.version import router as version_router
 # Import all models so SQLModel metadata picks them up
@@ -65,6 +66,7 @@ app.include_router(agent_router)
 app.include_router(ocr_router)
 app.include_router(settings_router)
 app.include_router(app_router)
+app.include_router(avatar_router)
 
 # Mount admin panel (conditional on ADMIN_ENABLED env var)
 setup_admin(app)

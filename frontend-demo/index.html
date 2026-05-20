@@ -108,6 +108,15 @@
           <h4>🤖 多智能体协作</h4>
           <p style="font-size:11px;color:var(--gray-400)">提问后显示协作过程</p>
         </div>
+        <div class="avatar-mini" id="avatar-mini" style="margin-top:12px">
+          <h4>🎬 数字人课堂助手</h4>
+          <p style="font-size:11px;color:var(--gray-400)" id="avatar-status-text">待配置</p>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">
+            <button class="btn btn-sm btn-outline" onclick="_avatarSpeakAnswer()" style="font-size:10px">🎤 讲解回答</button>
+            <button class="btn btn-sm btn-outline" onclick="_avatarSpeakPath()" style="font-size:10px">🗺️ 讲解路径</button>
+            <button class="btn btn-sm btn-outline" onclick="_avatarStop()" style="font-size:10px">⏹ 停止</button>
+          </div>
+        </div>
         <div class="profile-mini" id="profile-mini" style="margin-top:12px">
           <h4>🎓 学习画像</h4>
           <canvas id="profileRadarChart" width="240" height="240" style="max-width:100%;margin:8px 0;display:none"></canvas>

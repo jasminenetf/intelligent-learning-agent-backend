@@ -31,11 +31,12 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     # LLM Provider
-    LLM_PROVIDER: str = "mock"
+    LLM_PROVIDER: str = "deepseek"
 
     SPARK_BASE_URL: str = "https://spark-api-open.xf-yun.com/v1"
     SPARK_API_KEY: str = ""
-    SPARK_MODEL: str = "lite"
+    SPARK_API_PASSWORD: str = ""
+    SPARK_MODEL: str = "generalv3.5"
 
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_API_KEY: str = ""
@@ -43,6 +44,15 @@ class Settings(BaseSettings):
 
     LLM_TIMEOUT_SECONDS: int = 60
     LLM_MAX_RETRIES: int = 2
+
+    # Virtual Human / Digital Avatar
+    VIRTUAL_HUMAN_ENABLED: bool = False
+    XFYUN_VH_API_KEY: str = ""
+    XFYUN_VH_API_SECRET: str = ""
+    XFYUN_VH_BASE_URL: str = "https://vms.cn-huadong-1.xf-yun.com"
+    XFYUN_VH_AVATAR_ID: str = ""
+    XFYUN_VH_VOICE_ID: str = "x4_xiaoxuan"
+    VH_TIMEOUT_SECONDS: int = 30
 
     # Admin panel
     ADMIN_ENABLED: bool = False

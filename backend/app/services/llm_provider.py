@@ -134,15 +134,25 @@ def get_llm_provider() -> BaseLLMProvider:
     provider_name = (settings.LLM_PROVIDER or "mock").strip().lower()
 
     if provider_name == "spark":
-        if settings.SPARK_API_KEY:
+        spark_key = settings.SPARK_API_PASSWORD or settings.SPARK_API_KEY
+        if spark_key:
             try:
                 _provider = SparkLLMProvider()
                 logger.info("LLM: using Spark provider (model=%s)", settings.SPARK_MODEL)
                 return _provider
             except Exception as e:
-                logger.warning("LLM: Spark init failed (%s), fallback to mock", e)
+                logger.warning("LLM: Spark init failed (%s), trying DeepSeek fallback", e)
         else:
-            logger.warning("LLM: SPARK_API_KEY not set, fallback to mock")
+            logger.warning("LLM: Spark key not set")
+
+        # Fallback to DeepSeek if configured
+        if settings.DEEPSEEK_API_KEY:
+            try:
+                _provider = DeepSeekProvider()
+                logger.info("LLM: Spark→DeepSeek fallback (model=%s)", settings.DEEPSEEK_MODEL)
+                return _provider
+            except Exception as e:
+                logger.warning("LLM: DeepSeek fallback also failed (%s)", e)
 
     elif provider_name == "deepseek":
         if settings.DEEPSEEK_API_KEY:

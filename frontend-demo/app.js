@@ -1034,10 +1034,27 @@ function loadLearningPath(){
 // ════════════ PAGE: SETTINGS ════════════
 function loadSettings(){
   const el=document.getElementById('page-settings');
-  el.innerHTML='<div class="card"><div class="card-header"><h3>⚙️ API Key 配置</h3></div><div class="form-group"><label>API Key</label><input id="settings-key" type="password" placeholder="sk-..."><div class="form-hint">Key 仅保存在后端，不上传云端</div></div><div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="_saveSettings()">💾 保存</button><button class="btn btn-outline" onclick="_testConnection()">🔌 测试连接</button></div><div id="settings-status" style="margin-top:8px;font-size:12px"></div><div style="margin-top:12px"><button class="btn btn-sm btn-outline" onclick="document.getElementById(\'settings-advanced\').style.display=document.getElementById(\'settings-advanced\').style.display===\'none\'?\'block\':\'none\'">⚙️ 高级设置</button></div><div id="settings-advanced" style="display:none;margin-top:8px"><div class="form-group"><label>API Base URL</label><input id="settings-base" value="https://api.deepseek.com/v1"></div><div class="form-group"><label>Model</label><input id="settings-model" value="deepseek-chat"></div></div></div><div class="card"><div class="card-header"><h3>📊 系统状态</h3></div><div id="settings-sys-status"><div class="loading-block"><span class="spinner"></span> 加载...</div></div></div><div class="card"><div class="card-header"><h3>🔒 安全说明</h3></div><p style="font-size:12px;color:var(--gray-500)">🔐 Key 仅保存在本地后端 · 🚫 不会上传云端 · ✅ 已排除版本管理跟踪</p></div>';
+  el.innerHTML='<div class="card"><div class="card-header"><h3>⚙️ AI 模型配置</h3></div>'+
+    '<div class="form-group"><label>AI 提供商</label><select id="settings-provider" onchange="_onProviderChange()"><option value="deepseek">DeepSeek</option><option value="spark">讯飞星火</option></select></div>'+
+    '<div class="form-group" id="spark-model-group" style="display:none"><label>Spark 模型</label><select id="settings-spark-model"><option value="generalv3.5">generalv3.5</option><option value="generalv3">generalv3</option><option value="lite">lite</option><option value="pro-128k">pro-128k</option><option value="max-32k">max-32k</option><option value="4.0Ultra">4.0Ultra</option></select></div>'+
+    '<div class="form-group"><label>APIPassword / API Key</label><input id="settings-key" type="password" placeholder="输入 API 密码..."><div class="form-hint">Key 仅保存在后端，不上传云端</div></div>'+
+    '<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="_saveSettings()">💾 保存</button><button class="btn btn-outline" onclick="_testConnection()">🔌 测试连接</button></div>'+
+    '<div id="settings-status" style="margin-top:8px;font-size:12px"></div>'+
+    '<div style="margin-top:12px"><button class="btn btn-sm btn-outline" onclick="var el=document.getElementById(\'settings-advanced\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'">⚙️ 高级设置</button></div>'+
+    '<div id="settings-advanced" style="display:none;margin-top:8px"><div class="form-group"><label>API Base URL</label><input id="settings-base" value="https://api.deepseek.com/v1"></div><div class="form-group"><label>Model Override</label><input id="settings-model" value="deepseek-chat"></div></div></div>'+
+    '<div class="card"><div class="card-header"><h3>📊 系统状态</h3></div><div id="settings-sys-status"><div class="loading-block"><span class="spinner"></span> 加载...</div></div></div>'+
+    '<div class="card"><div class="card-header"><h3>🔒 安全说明</h3></div><p style="font-size:12px;color:var(--gray-500)">🔐 Key 仅保存在本地后端 · 🚫 不会上传云端 · ✅ 已排除版本管理跟踪</p></div>';
   api('/api/settings/status').then(({ok,data})=>{const s=$('#settings-sys-status');if(ok)s.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px"><div><b>AI Provider:</b> '+esc(data.llm_provider||'—')+'</div><div><b>模型:</b> '+esc(data.llm_model||'—')+'</div><div><b>Mock模式:</b> '+(data.is_mock?'是':'否')+'</div><div><b>Key已配置:</b> '+(data.deepseek_configured?'✅':'❌')+'</div><div><b>资料检索:</b> '+(data.embedding_is_mock?'未启用':'已启用')+'</div></div>';}).catch(()=>{});}
 
-window._saveSettings=async function(){const key=document.getElementById('settings-key')?.value.trim(),base=document.getElementById('settings-base')?.value.trim(),model=document.getElementById('settings-model')?.value.trim();if(!key){toast('请输入 API Key','error');return;}const se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 保存中...';try{const{ok,data}=await api('/api/settings/llm',{method:'POST',body:JSON.stringify({provider:'deepseek',api_key:key,base_url:base||'https://api.deepseek.com/v1',model:model||'deepseek-chat'})});se.innerHTML=ok?'<span style="color:var(--success)">✅ 已保存</span>':'<span style="color:var(--danger)">❌ 失败: '+esc(data.detail||'')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
+window._onProviderChange=function(){
+  var prov=document.getElementById('settings-provider')?.value;
+  var sparkGroup=document.getElementById('spark-model-group');
+  if(sparkGroup)sparkGroup.style.display=prov==='spark'?'block':'none';
+  var baseInput=document.getElementById('settings-base');
+  if(baseInput)baseInput.value=prov==='spark'?'https://spark-api-open.xf-yun.com/v1':'https://api.deepseek.com/v1';
+};
+
+window._saveSettings=async function(){var provider=document.getElementById('settings-provider')?.value||'deepseek';var key=document.getElementById('settings-key')?.value.trim();if(!key){toast('请输入 API 密码','error');return;}var base=document.getElementById('settings-base')?.value.trim();var model=document.getElementById('settings-spark-model')?.value||document.getElementById('settings-model')?.value.trim()||'deepseek-chat';var se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 保存中...';try{var body={provider:provider,api_key:key,base_url:base||(provider==='spark'?'https://spark-api-open.xf-yun.com/v1':'https://api.deepseek.com/v1'),model:model};const{ok,data}=await api('/api/settings/llm',{method:'POST',body:JSON.stringify(body)});se.innerHTML=ok?'<span style="color:var(--success)">✅ 已保存</span>':'<span style="color:var(--danger)">❌ 失败: '+esc(data.detail||'')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
 window._testConnection=async function(){const se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 测试中...';try{const{ok,data}=await api('/api/settings/test-llm',{method:'POST',body:JSON.stringify({message:'你好，请回复连接成功'})});se.innerHTML=(ok&&data.ok)?'<span style="color:var(--success)">✅ 连接成功! '+data.latency_ms+'ms</span>':'<span style="color:var(--danger)">❌ '+esc(data.error||'连接失败')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
 
 // ════════════ FULL DEMO ════════════
@@ -1284,6 +1301,42 @@ window.resetAllQuiz = function(prefix) {
   });
   var scoreEl = document.getElementById('quiz-score-'+prefix);
   if (scoreEl) scoreEl.innerHTML = '已答 0 / '+items.length+' 题 | 正确率 —%';
+};
+
+// ════════════ R3: AVATAR FUNCTIONS ════════════
+window._avatarSpeakAnswer = async function() {
+  var text = (S.currentAnswerData?.answer || S.lastAnswerTopic || '').substring(0, 500);
+  if (!text) { toast('暂无回答可供讲解', 'info'); return; }
+  try {
+    var res = await api('/api/avatar/speak', {method:'POST', body:JSON.stringify({text:text,source:'answer'})});
+    if (res.ok && res.data.ok) {
+      document.getElementById('avatar-status-text').textContent = '正在讲解...';
+      toast('数字人正在讲解当前回答', 'success');
+    } else {
+      var msg = (res.data?.message || res.data?.error_code || '数字人服务不可用');
+      document.getElementById('avatar-status-text').textContent = '未配置';
+      toast(msg, 'info');
+    }
+  } catch(e) { toast('数字人服务不可用', 'info'); }
+};
+window._avatarSpeakPath = async function() {
+  var plan = S.genCache?.['study_plan'];
+  var text = plan?.study_plan?.profile_summary || '暂无学习路径';
+  text = text.substring(0, 300);
+  try {
+    var res = await api('/api/avatar/speak', {method:'POST', body:JSON.stringify({text:text,source:'study_plan'})});
+    if (res.ok && res.data.ok) {
+      document.getElementById('avatar-status-text').textContent = '正在讲解...';
+      toast('数字人正在讲解学习路径', 'success');
+    } else {
+      document.getElementById('avatar-status-text').textContent = '未配置';
+      toast(res.data?.message || '数字人服务不可用', 'info');
+    }
+  } catch(e) { toast('数字人服务不可用', 'info'); }
+};
+window._avatarStop = async function() {
+  document.getElementById('avatar-status-text').textContent = '已就绪';
+  toast('已停止讲解', 'info');
 };
 
 // ── INIT ──────────────────────────────────────────
