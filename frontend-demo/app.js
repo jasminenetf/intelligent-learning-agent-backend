@@ -11,7 +11,8 @@ const S = {
   user: null, courseId: 2, courseName: '高等数学上',
   courses: [], profile: null, sidebarCollapsed: false,
   kbReady: false, kbChunks: 16,
-  demoResults: null, genCache: {}, zoomScale: 1, zoomPanX: 0, zoomPanY: 0
+  demoResults: null, genCache: {}, zoomScale: 1, zoomPanX: 0, zoomPanY: 0,
+  lastQuestion: '', lastAnswerTopic: '导数与极限入门'
 };
 
 const $ = (s,c) => (c||document).querySelector(s);
@@ -417,10 +418,10 @@ const DEFAULT_PLAN = {title:'导数与极限学习路径',profile_summary:'基�
 function initAssistant(){
   const msgs=$('#chat-messages');if(!msgs)return;
   if(msgs.children.length===0){
-    msgs.innerHTML='<div class="msg-bubble agent"><div class="msg-content"><b>你好！我是你的 AI 学习助手。</b><br><br>我已连接当前课程《'+esc(S.courseName)+'》（'+S.kbChunks+' 个知识点），可以帮你：<br>• 解释概念和答疑<br>• 生成思维导图、测验题、讲义<br>• 规划个性化学习路径<br><br><b>试试问我：</b></div></div>';
+    msgs.innerHTML='<div class="msg-bubble agent"><div class="msg-content"><b>你好！我是你的 AI 学习助手。</b><br><br>📚 <b>当前课程：</b>'+esc(S.courseName)+'<br>📊 <b>资料状态：</b>课程资料已就绪，'+S.kbChunks+' 个课程知识点<br>🧠 <b>推荐操作：</b>先问一个问题，或直接生成复习资料<br><br>可以帮你：<br>• 解释概念和答疑<br>• 生成思维导图、测验题、讲义<br>• 规划个性化学习路径<br><br><b>试试直接点击下方问题：</b></div></div>';
     const qs=['导数和函数变化率有什么关系？','极限为什么是学习导数的基础？','帮我生成导数与极限的复习资料'];
     let qhtml='<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">';
-    qs.forEach(q=>{qhtml+='<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'chat-input\').value=\''+esc(q)+'\';_sendQuestion()" style="font-size:11px">'+esc(q)+'</button>';});
+    qs.forEach(q=>{qhtml+='<button class="btn btn-sm btn-outline" onclick="_askQuestion(\''+esc(q)+'\')" style="font-size:11px">'+esc(q)+'</button>';});
     qhtml+='</div>';
     msgs.innerHTML+=qhtml;
   }
@@ -493,10 +494,27 @@ function fillDefaultArtifacts(){
   }
 }
 
+window._askQuestion = async function(q) {
+  S.lastQuestion = q;
+  S.lastAnswerTopic = q.length > 40 ? q.substring(0, 40) + '...' : q;
+  if(!S.token){toast('请先登录','error');return;}
+  const msgs=$('#chat-messages');
+  msgs.innerHTML+='<div class="msg-bubble user"><div class="msg-content">'+esc(q)+'</div></div>';
+  const lid='load_'+Date.now();
+  msgs.innerHTML+='<div class="msg-bubble agent" id="'+lid+'"><div class="msg-content"><span class="spinner"></span> AI 学习助手思考中...</div></div>';
+  
+  // Animate agent states
+  animateAgentAsk();
+  msgs.scrollTop=msgs.scrollHeight;
+  
+
+
 window._sendQuestion=async function(){
-  const input=document.getElementById('chat-input');const q=input.value.trim();if(!q)return;if(!S.token){toast('请先登录','error');return;}
-  const msgs=$('#chat-messages');msgs.innerHTML+='<div class="msg-bubble user"><div class="msg-content">'+esc(q)+'</div></div>';input.value='';
-  const lid='load_'+Date.now();msgs.innerHTML+='<div class="msg-bubble agent" id="'+lid+'"><div class="msg-content"><span class="spinner"></span> AI 学习助手思考中...</div></div>';msgs.scrollTop=msgs.scrollHeight;
+  const input=document.getElementById('chat-input');const q=input.value.trim();
+  if(!q)return;
+  input.value='';
+  await _askQuestion(q);
+};
   try{
     const{ok,data}=await api('/api/app/ask',{method:'POST',body:JSON.stringify({course_id:S.courseId,question:q,top_k:8})});
     const le=document.getElementById(lid);if(le)le.remove();
@@ -539,6 +557,52 @@ window._sendQuestion=async function(){
   msgs.scrollTop=msgs.scrollHeight;
 };
 
+// ════════ AGENT ANIMATION ════════
+function animateAgentAsk() {
+  const trace = document.getElementById('agent-trace');
+  if (!trace) return;
+  const agents = [
+    {agent:'AI学习助手',status:'running'},
+    {agent:'资料检索',status:'pending'},
+    {agent:'内容校验',status:'pending'},
+    {agent:'资源推荐',status:'pending'}
+  ];
+  trace.innerHTML = buildAgentTrace(agents);
+  // Sequential animation
+  setTimeout(() => { const t=document.getElementById('agent-trace'); if(t) t.innerHTML=buildAgentTrace([{agent:'AI学习助手',status:'completed'},{agent:'资料检索',status:'running'},{agent:'内容校验',status:'pending'},{agent:'资源推荐',status:'pending'}]); }, 800);
+  setTimeout(() => { const t=document.getElementById('agent-trace'); if(t) t.innerHTML=buildAgentTrace([{agent:'AI学习助手',status:'completed'},{agent:'资料检索',status:'completed'},{agent:'内容校验',status:'running'},{agent:'资源推荐',status:'pending'}]); }, 1600);
+  setTimeout(() => { const t=document.getElementById('agent-trace'); if(t) t.innerHTML=buildAgentTrace([{agent:'AI学习助手',status:'completed'},{agent:'资料检索',status:'completed'},{agent:'内容校验',status:'completed'},{agent:'资源推荐',status:'running'}]); }, 2400);
+}
+
+function agentMarkFail() {
+  const trace = document.getElementById('agent-trace');
+  if (!trace) return;
+  trace.innerHTML = buildAgentTrace([
+    {agent:'AI学习助手',status:'failed',detail:'请求失败'},
+    {agent:'资料检索',status:'failed'},
+    {agent:'内容校验',status:'pending'},
+    {agent:'资源推荐',status:'pending'}
+  ]);
+}
+
+function buildAnswerSummaryCard(data) {
+  const cites = data.citations || [];
+  const count = cites.length;
+  const types = [{t:'mindmap',l:'思维导图',i:'🧠'},{t:'quiz',l:'测验',i:'📝'},{t:'lecture_doc',l:'讲义',i:'📄'}];
+  let btns = types.map(t => '<button class="btn btn-sm btn-outline" onclick="_quickGenerate(\''+t.t+'\')">'+t.i+' '+t.l+'</button>').join('');
+  return '<div class="answer-summary" style="margin-top:8px;padding:10px 14px;background:var(--primary-bg);border-radius:var(--radius);font-size:11px">'+
+    '<div style="font-weight:600;margin-bottom:6px;color:var(--primary-dark)">✅ 回答已生成 · 引用 '+count+' 条课程资料</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">'+btns+'</div>'+
+    '<div style="margin-top:4px;font-size:10px;color:var(--gray-400)">基于当前回答一键生成学习资源</div></div>';
+}
+
+function buildErrorCard(detail) {
+  return '<div class="error-card"><div class="err-title">⚠ 操作失败</div>'+
+    '<div class="err-detail">'+esc(detail)+'</div>'+
+    '<div class="err-suggestion">建议：检查 AI 模型连接、重新登录或切换课程后重试</div>'+
+    '<div class="err-actions"><button class="btn btn-sm btn-primary" onclick="_askQuestion(S.lastQuestion||document.getElementById(\'chat-input\')?.value)">🔄 重试</button></div></div>';
+}
+
 window.toggleAnswerFold = function(btn) {
   const fold = btn.closest('.msg-answer-fold');
   if (!fold) return;
@@ -555,7 +619,7 @@ window.toggleAnswerFold = function(btn) {
 
 window._quickGenerate=async function(type){
   if(!S.token){toast('请先登录','error');return;}
-  const topic=document.getElementById('chat-input')?.value.trim()||'导数与极限入门';
+  const topic=S.lastAnswerTopic||document.getElementById('chat-input')?.value.trim()||'导数与极限入门';
   toast('正在生成 '+({mindmap:'思维导图',quiz:'测验',lecture_doc:'讲义',ppt:'PPT',study_plan:'学习路径'}[type]||type)+'...','info');
   try{
     const{ok,data}=await api('/api/app/generate',{method:'POST',body:JSON.stringify({course_id:S.courseId,resource_type:type,topic})});
@@ -614,6 +678,14 @@ function renderArtifact(type,data){
   _switchArtifactTab(type);
 }
 
+window.highlightCite = function(idx) {
+  // Highlight citation card
+  $$('.cite-card').forEach(c => c.style.borderColor = '');
+  const card = document.getElementById('cite-card-'+idx);
+  if (card) { card.style.borderColor = 'var(--primary)'; card.style.boxShadow = '0 0 0 2px var(--primary-bg)'; card.scrollIntoView({behavior:'smooth',block:'center'}); }
+  toast('引用 ['+idx+'] 已高亮','info');
+};
+
 window.copyLectureContent = function() {
   const content = document.querySelector('#artifact-lecture .lecture-content');
   if (!content) return;
@@ -624,28 +696,30 @@ function renderCitations(cits){
   const panel = $('#citations-panel');
   if (!panel) return;
   if (!cits || !cits.length) {
-    panel.innerHTML='<div class="cite-section"><h4>📚 文献溯源</h4><div class="cite-empty">提问后将在这里展示课程资料引用</div></div><div class="cite-section" id="agent-section"></div><div class="cite-section" id="profile-section"></div>';
+    panel.innerHTML='<div class="cite-section"><h4>📚 文献溯源</h4><div class="cite-empty">当前回答暂无课程引用<br><span style="font-size:10px;color:var(--gray-400)">请先构建课程资料库或换一个问题</span></div></div><div class="cite-section" id="agent-section"></div><div class="cite-section" id="profile-section"></div>';
     return;
   }
   const seen = new Set();
   let cards = '';
+  let idx = 0;
   cits.forEach(c => {
     const k = c.source || '课程资料';
     if (seen.has(k)) return;
     seen.add(k);
+    idx++;
     const score = c.score || 0;
     const scorePct = Math.round(score * 100);
     const scoreClass = scorePct >= 70 ? 'high' : scorePct >= 40 ? 'medium' : 'low';
     const snippet = (c.content || '').substring(0, 120);
-    cards += '<div class="cite-card">'+
+    cards += '<div class="cite-card" id="cite-card-'+idx+'">'+
       '<div class="cite-header">'+
-        '<span class="cite-filename">📄 '+esc(k)+'</span>'+
+        '<span class="cite-filename"><span class="cite-num">['+idx+']</span> '+esc(k)+'</span>'+
         '<span class="cite-score '+scoreClass+'">'+(scorePct > 0 ? '相关度 '+scorePct+'%' : '来源')+'</span>'+
       '</div>'+
       (snippet ? '<div class="cite-snippet">'+esc(snippet)+'</div>' : '')+
       '<div class="cite-meta">'+
         (c.page_number ? '<span>📍 第'+c.page_number+'页</span>' : '')+
-        '<button class="cite-btn" onclick="toast(\'来源详情功能即将开放\',\'info\')">查看来源 →</button>'+
+        '<button class="cite-btn" onclick="highlightCite('+idx+')">查看引用 →</button>'+
       '</div>'+
     '</div>';
   });

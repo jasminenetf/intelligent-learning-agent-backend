@@ -158,8 +158,10 @@ a{color:var(--primary);text-decoration:none}
 .cite-card-grid{display:flex;flex-direction:column;gap:8px}
 .cite-card{border:1px solid var(--gray-200);border-radius:var(--radius);padding:10px 12px;background:#fff;font-size:11px;transition:all var(--transition)}
 .cite-card:hover{border-color:var(--primary-light);box-shadow:0 1px 4px rgba(79,70,229,.08)}
+.cite-card.highlighted{border-color:var(--primary)!important;box-shadow:0 0 0 2px var(--primary-bg)!important;transition:all .3s ease}
 .cite-card .cite-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .cite-card .cite-filename{font-weight:600;color:var(--gray-700);font-size:11px}
+.cite-card .cite-num{display:inline-block;background:var(--primary-bg);color:var(--primary);font-size:10px;padding:1px 5px;border-radius:4px;margin-right:4px;font-weight:700}
 .cite-card .cite-score{font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;white-space:nowrap}
 .cite-card .cite-score.high{background:var(--success-bg);color:var(--success)}
 .cite-card .cite-score.medium{background:var(--warning-bg);color:var(--warning)}
