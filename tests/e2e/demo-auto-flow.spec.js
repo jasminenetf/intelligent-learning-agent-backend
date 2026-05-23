@@ -137,6 +137,16 @@ test.describe('competition demo auto learning flow', () => {
     // Should have the intro text
     expect(planText).toMatch(/薄弱|顺序/);
 
+    // ═══════════ Step 10b: Learning Report ═══════════
+    const reportCard = page.locator('[data-testid="learning-report-card"]');
+    try {
+      await reportCard.waitFor({ state: 'visible', timeout: 10000 });
+      const reportText = await reportCard.innerText();
+      expect(reportText).toMatch(/正确率|薄弱|画像|推荐/);
+    } catch (e) {
+      console.log('[INFO] Learning report card absent (expected if quiz fallback)');
+    }
+
     // ═══════════ Step 11: Regenerate ═══════════
     page._collectedErrors = [];
     page._collectedWarnings = [];

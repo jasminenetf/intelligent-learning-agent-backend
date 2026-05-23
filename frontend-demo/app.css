@@ -649,3 +649,15 @@ a{color:var(--primary);text-decoration:none}
 /* ── Agent trace is-failed ── */
 .agent-trace-card.is-failed{opacity:.7;border-left:3px solid var(--warning)}
 .agent-status-tag.failed{background:var(--warning-bg);color:var(--warning)}
+
+/* ── Learning Report ── */
+.lr-summary{display:flex;gap:8px;margin:8px 0}
+.lr-stat{flex:1;text-align:center;padding:8px 4px;background:var(--gray-50);border-radius:var(--radius)}
+.lr-stat-value{display:block;font-size:16px;font-weight:700;color:var(--primary)}
+.lr-stat-label{display:block;font-size:10px;color:var(--gray-400);margin-top:2px}
+.lr-section{margin-top:10px}
+.lr-section-title{font-size:11px;font-weight:600;color:var(--gray-500);margin-bottom:6px}
+.lr-chips{display:flex;flex-wrap:wrap;gap:4px}
+.lr-chip{font-size:10px;padding:2px 8px;background:var(--warning-bg);color:var(--warning);border-radius:10px;white-space:nowrap}
+.lr-resource-card{display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:11px;color:var(--gray-700);background:#fff;border-radius:6px;margin:3px 0;border:1px solid var(--gray-100)}
+.lr-resource-icon{font-size:13px;flex-shrink:0}

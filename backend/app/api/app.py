@@ -22,6 +22,7 @@ from app.core.database import get_session
 from app.core.security import create_access_token
 from app.models.course import Course
 from app.models.knowledge_chunk import KnowledgeChunk
+from app.models.quiz_attempt import QuizAttempt
 from app.models.student_profile import StudentProfile
 from app.models.user import User
 from app.schemas.resource import ResourceType
@@ -704,4 +705,163 @@ def api_run_demo(
             ],
             "resources": resources,
         },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /api/app/quiz/submit
+# ═══════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel as PydanticBaseModel
+
+
+class QuizSubmitRequest(PydanticBaseModel):
+    course_id: int = 0
+    topic: str = ""
+    question_text: str = ""
+    selected_answer: str = ""
+    correct_answer: str = ""
+    is_correct: bool = False
+    knowledge_point: str = ""
+    explanation: str = ""
+
+
+@router.post("/quiz/submit")
+def api_quiz_submit(
+    body: QuizSubmitRequest,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Record a quiz answer and update student profile weak_points."""
+    import json as _json
+
+    uid = int(user.id) if user.id else 0
+
+    # 1. Save attempt
+    attempt = QuizAttempt(
+        user_id=uid,
+        course_id=body.course_id,
+        topic=body.topic,
+        question_text=body.question_text,
+        selected_answer=body.selected_answer,
+        correct_answer=body.correct_answer,
+        is_correct=body.is_correct,
+        knowledge_point=body.knowledge_point,
+        explanation=body.explanation,
+    )
+    session.add(attempt)
+    session.commit()
+    session.refresh(attempt)
+
+    # 2. Update profile weak_points if answer was wrong
+    updated_weak_points = []
+    if not body.is_correct and body.knowledge_point:
+        profile = session.exec(
+            select(StudentProfile).where(StudentProfile.user_id == uid)
+        ).first()
+        if profile:
+            existing = []
+            if profile.weak_points:
+                try:
+                    existing = _json.loads(profile.weak_points)
+                    if not isinstance(existing, list):
+                        existing = [profile.weak_points]
+                except Exception:
+                    existing = [profile.weak_points]
+            if body.knowledge_point not in existing:
+                existing.append(body.knowledge_point)
+                profile.weak_points = _json.dumps(existing, ensure_ascii=False)
+                session.add(profile)
+                session.commit()
+                updated_weak_points = existing
+
+    return {
+        "ok": True,
+        "attempt_id": int(attempt.id) if attempt.id else 0,
+        "is_correct": body.is_correct,
+        "updated_weak_points": updated_weak_points,
+        "message": "作答已记录，学习画像已更新",
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /api/app/learning-report
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/learning-report")
+def api_learning_report(
+    course_id: Optional[int] = None,
+    topic: Optional[str] = None,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Generate a learning evaluation report from quiz attempts."""
+    import json as _json
+    uid = int(user.id) if user.id else 0
+
+    # Build query
+    stmt = select(QuizAttempt).where(QuizAttempt.user_id == uid)
+    if course_id is not None:
+        stmt = stmt.where(QuizAttempt.course_id == course_id)
+    if topic:
+        stmt = stmt.where(QuizAttempt.topic == topic)
+
+    attempts = session.exec(stmt).all()
+
+    total = len(attempts)
+    if total == 0:
+        return {
+            "total_attempts": 0,
+            "correct_count": 0,
+            "accuracy": 0.0,
+            "weak_points": [],
+            "recommended_resources": [],
+            "profile_updated": False,
+        }
+
+    correct = sum(1 for a in attempts if a.is_correct)
+    accuracy = round(correct / total, 2) if total > 0 else 0.0
+
+    # Weak points from wrong answers
+    wp_counts = {}
+    for a in attempts:
+        if not a.is_correct and a.knowledge_point:
+            wp_counts[a.knowledge_point] = wp_counts.get(a.knowledge_point, 0) + 1
+
+    # Top weak points sorted by frequency
+    weak_points = sorted(wp_counts.keys(), key=lambda k: -wp_counts[k])
+
+    # Recommended resources based on weak points
+    resource_map = {
+        "正则化": [{"type": "mindmap", "title": "正则化知识结构图"}, {"type": "quiz", "title": "正则化专项练习"}],
+        "过拟合": [{"type": "lecture_doc", "title": "过拟合详解讲义"}, {"type": "quiz", "title": "过拟合专项练习"}],
+        "欠拟合": [{"type": "study_plan", "title": "欠拟合学习路径"}, {"type": "quiz", "title": "欠拟合专项练习"}],
+        "过拟合与正则化": [{"type": "mindmap", "title": "过拟合与正则化知识结构图"}, {"type": "quiz", "title": "巩固练习"}],
+    }
+    recommended = []
+    seen = set()
+    for wp in weak_points:
+        for r in resource_map.get(wp, resource_map.get("过拟合与正则化", [])):
+            if r["title"] not in seen:
+                recommended.append(r)
+                seen.add(r["title"])
+    if not recommended:
+        recommended = [
+            {"type": "mindmap", "title": "知识结构图"},
+            {"type": "study_plan", "title": "个性化学习路径"},
+        ]
+
+    # Check if profile has updated weak_points
+    profile = session.exec(
+        select(StudentProfile).where(StudentProfile.user_id == uid)
+    ).first()
+    profile_updated = bool(profile and profile.weak_points and profile.weak_points != "[]")
+
+    return {
+        "total_attempts": total,
+        "correct_count": correct,
+        "accuracy": accuracy,
+        "weak_points": weak_points,
+        "recommended_resources": recommended,
+        "profile_updated": profile_updated,
     }

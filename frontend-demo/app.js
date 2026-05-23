@@ -1573,7 +1573,104 @@ window._compSelectQuiz = function(qi, oi) {
   var total = compQuizState.items.length;
   var progressEl = document.getElementById('comp-quiz-progress');
   if (progressEl) progressEl.textContent = '已答: ' + answered + '/' + total;
+
+  // Submit to backend (fire-and-forget)
+  compSubmitToBackend(q, oi, ans);
+  // Refresh learning report
+  setTimeout(function() { compLoadLearningReport(); }, 800);
 };
+
+// ── Quiz backend submit ──
+
+function compSubmitToBackend(q, selectedOi, correctAns) {
+  if (!S.token) return;
+  var isCorrect = (selectedOi === correctAns);
+  var body = {
+    course_id: S.courseId,
+    topic: DEMO_TOPIC,
+    question_text: q.question || q.q || '',
+    selected_answer: String.fromCharCode(65 + selectedOi),
+    correct_answer: String.fromCharCode(65 + correctAns),
+    is_correct: isCorrect,
+    knowledge_point: q.knowledge_point || q.topic || DEMO_TOPIC,
+    explanation: q.explanation || q.explain || '',
+  };
+  fetch(S.apiBase + '/api/app/quiz/submit', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+S.token},
+    body: JSON.stringify(body),
+  }).catch(function() {
+    // Silent fail — local feedback already shown
+    console.warn('Quiz submit failed (non-blocking)');
+  });
+}
+
+// ── Learning report ──
+
+function compLoadLearningReport() {
+  if (!S.token) return;
+  fetch(S.apiBase + '/api/app/learning-report?course_id=' + S.courseId + '&topic=' + encodeURIComponent(DEMO_TOPIC), {
+    headers: {'Authorization':'Bearer '+S.token},
+  }).then(function(r) { return r.json(); })
+  .then(function(data) {
+    compRenderLearningReport(data);
+  }).catch(function() {
+    // Report card will show default state
+  });
+}
+
+function compRenderLearningReport(data) {
+  var el = document.getElementById('comp-learning-report');
+  if (!el) {
+    // Create card if not exists
+    var rightCol = document.querySelector('.comp-col-right');
+    if (!rightCol) return;
+    el = document.createElement('div');
+    el.className = 'comp-side-section';
+    el.id = 'comp-learning-report';
+    el.setAttribute('data-testid', 'learning-report-card');
+    rightCol.appendChild(el);
+  }
+
+  var total = data.total_attempts || 0;
+  if (total === 0) {
+    el.innerHTML = '<h4>📊 学习报告</h4><p style="font-size:11px;color:var(--gray-400)">完成测验后将自动生成</p>';
+    return;
+  }
+
+  var accuracy = Math.round((data.accuracy || 0) * 100);
+  var weakPoints = data.weak_points || [];
+  var resources = data.recommended_resources || [];
+  var profileOk = data.profile_updated;
+
+  var html = '<h4>📊 学习报告</h4>' +
+    '<div class="lr-summary">' +
+      '<div class="lr-stat"><span class="lr-stat-value" data-testid="accuracy-value">' + accuracy + '%</span><span class="lr-stat-label">正确率</span></div>' +
+      '<div class="lr-stat"><span class="lr-stat-value">' + total + '</span><span class="lr-stat-label">已答题</span></div>' +
+      '<div class="lr-stat"><span class="lr-stat-value">' + (profileOk ? '✅' : '⏳') + '</span><span class="lr-stat-label">画像更新</span></div>' +
+    '</div>';
+
+  if (weakPoints.length > 0) {
+    html += '<div class="lr-section"><div class="lr-section-title">📌 当前薄弱点</div><div class="lr-chips">';
+    weakPoints.forEach(function(wp) {
+      html += '<span class="lr-chip" data-testid="weak-point-chip">' + esc(wp) + '</span>';
+    });
+    html += '</div></div>';
+  }
+
+  if (resources.length > 0) {
+    html += '<div class="lr-section"><div class="lr-section-title">📖 推荐复习</div>';
+    resources.forEach(function(r) {
+      html += '<div class="lr-resource-card" data-testid="recommended-resource-card">' +
+        '<span class="lr-resource-icon">' + ({mindmap:'🧠',quiz:'📝',lecture_doc:'📄',study_plan:'🗺️'}[r.type]||'📚') + '</span>' +
+        '<span>' + esc(r.title) + '</span></div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<p style="font-size:10px;color:var(--gray-400);margin-top:4px">根据测验表现，系统已识别薄弱点并更新学习画像</p>';
+  el.innerHTML = html;
+}
 
 window._compSubmitQuiz = function() {
   var total = compQuizState.items.length;
