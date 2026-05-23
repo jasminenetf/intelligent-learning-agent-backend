@@ -99,10 +99,8 @@ test.describe('UI UX Audit', () => {
     // Full page screenshot
     await page.screenshot({ path: '../../../docs/screenshots/r3_ui_audit/03_answer_citation.png', fullPage: false });
 
-    // Check settings page
-    await page.locator('.nav-divider').click();
-    await page.waitForTimeout(300);
-    await page.locator('.nav-sub:has-text("设置")').click();
+    // Check settings page (now a top-level nav item)
+    await page.locator('#nav-settings').click();
     await page.waitForTimeout(500);
     await page.screenshot({ path: '../../../docs/screenshots/r3_ui_audit/08_settings.png', fullPage: false });
 
