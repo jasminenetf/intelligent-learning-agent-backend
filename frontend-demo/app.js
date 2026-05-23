@@ -989,14 +989,32 @@ async function loadCourses(){
   try{
     let enriched=S.courses;
     if((!enriched||enriched.length===0)&&S.token){const{ok,data}=await api('/api/app/bootstrap');if(ok&&data.courses&&data.courses.length){enriched=data.courses;S.courses=data.courses;}}
-    let h='<div class="card"><div class="card-header"><h3>课程列表</h3><button class="btn btn-sm btn-primary" onclick="_createCourse()">+ 创建课程</button></div>';
+    let h='<div class="card"><div class="card-header"><h3>课程列表</h3><button class="btn btn-sm btn-primary" onclick="_toggleCreateForm()" id="btn-create-course">+ 创建课程</button></div>';
     if(!enriched||enriched.length===0)h+='<div class="empty-state"><div class="empty-icon">📚</div><p>暂无课程</p><p style="font-size:11px;color:var(--gray-400)">点击"创建课程"添加</p></div>';
     else{
-      enriched.sort((a,b)=>{const ka=a.has_knowledge_base?1:0,kb=b.has_knowledge_base?1:0;if(ka!==kb)return kb-ka;const na=(a.name||'').includes('高等数学上')?1:0,nb=(b.name||'').includes('高等数学上')?1:0;return nb-na;});
-      enriched.forEach(c=>{const sel=c.id===S.courseId;const hasKB=c.has_knowledge_base||(c.chunks_count>0);const kbBadge=hasKB?'<span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 6px;border-radius:8px;margin-left:6px">📚 知识库就绪</span>':'<span style="font-size:10px;background:var(--warning-bg);color:var(--warning);padding:1px 6px;border-radius:8px;margin-left:6px">⚠ 暂无资料</span>';
-        h+='<div class="course-card'+(sel?' selected':'')+'" onclick="_selectCourse('+c.id+',\''+esc(c.name||'')+'\','+(c.chunks_count||0)+','+hasKB+')"><h4>📚 '+esc(c.name||'')+(sel?' ✓':'')+kbBadge+'</h4><div class="course-meta"><span>课程知识点: '+(c.chunks_count||0)+'</span><span>'+esc(c.description||'')+'</span></div></div>';});
+      // Sort: AI导论 first, then courses with KB, then empty courses
+      enriched.sort(function(a,b){
+        var aiA = (a.name||'').includes('人工智能导论') ? 2 : 0;
+        var aiB = (b.name||'').includes('人工智能导论') ? 2 : 0;
+        if (aiA !== aiB) return aiB - aiA;
+        var ka = (a.has_knowledge_base || (a.chunks_count > 0)) ? 1 : 0;
+        var kb = (b.has_knowledge_base || (b.chunks_count > 0)) ? 1 : 0;
+        return kb - ka;
+      });
+      var emptyHtml = '';
+      enriched.forEach(c=>{
+        var sel=c.id===S.courseId;
+        var hasKB=c.has_knowledge_base||(c.chunks_count>0);
+        var kbBadge=hasKB?'<span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:1px 6px;border-radius:8px;margin-left:6px">📚 课程资料已连接</span>':'<span style="font-size:10px;background:var(--gray-100);color:var(--gray-400);padding:1px 6px;border-radius:8px;margin-left:6px">暂无资料</span>';
+        var cardHtml='<div class="course-card'+(sel?' selected':'')+(hasKB?'':' course-empty')+'" onclick="_selectCourse('+c.id+',\''+esc(c.name||'')+'\','+(c.chunks_count||0)+','+hasKB+')"><h4>📚 '+esc(c.name||'')+(sel?' ✓':'')+kbBadge+'</h4><div class="course-meta"><span>知识片段: '+(c.chunks_count||0)+'</span><span>'+esc(c.description||'')+'</span></div></div>';
+        if (hasKB) h += cardHtml;
+        else emptyHtml += cardHtml;
+      });
+      if (emptyHtml) {
+        h += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100)"><button class="btn btn-sm btn-outline" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\';this.textContent=this.textContent.includes(\'展开\')?\'收起空课程\':\'展开空课程 (无资料)\'" style="font-size:11px;color:var(--gray-400)">展开空课程 (无资料)</button><div style="display:none;margin-top:8px">'+emptyHtml+'</div></div>';
+      }
     }
-    h+='</div><div class="card"><div class="card-header"><h3>创建课程</h3></div><div class="form-group"><label>课程名称</label><input id="new-course-name" placeholder="例: 高等数学"></div><div class="form-group"><label>课程描述</label><input id="new-course-desc" placeholder="简要说明"></div><button class="btn btn-primary" onclick="_createCourse()">创建</button></div>';
+    h+='</div><div class="card" id="create-course-form" style="display:none"><div class="card-header"><h3>创建课程</h3></div><div class="form-group"><label>课程名称</label><input id="new-course-name" placeholder="例: 高等数学"></div><div class="form-group"><label>课程描述</label><input id="new-course-desc" placeholder="简要说明"></div><button class="btn btn-primary" onclick="_createCourse()">创建</button></div>';
     el.innerHTML=h;
   }catch(e){
     var errMsg = (e.message||'');
@@ -1006,6 +1024,11 @@ async function loadCourses(){
     el.innerHTML='<div class="error-card" style="max-width:500px;margin:20px auto"><div class="err-title">⚠ 数据看板加载失败</div><div class="err-detail">'+esc(errMsg)+'</div><div class="err-suggestion">检查后端服务是否运行在 http://127.0.0.1:8000</div><div class="err-actions"><button class="btn btn-sm btn-primary" onclick="loadDashboard()">🔄 重试</button><button class="btn btn-sm btn-outline" onclick="navTo(\'assistant\')">💬 去学习助手</button></div></div>';
   }
 }
+
+window._toggleCreateForm = function() {
+  var form = document.getElementById('create-course-form');
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+};
 
 window._selectCourse=function(id,name,chunks,hasKB){S.courseId=id;S.courseName=name;S.kbChunks=chunks||0;S.kbReady=!!hasKB;updateTopbar();loadCourses();toast(hasKB?'已选择: '+name+'（'+chunks+' 知识点）':'已选择: '+name+'（暂无课程资料）',hasKB?'success':'info');};
 window._createCourse=async function(){const name=document.getElementById('new-course-name')?.value.trim();if(!name){toast('请输入课程名称','error');return;}const desc=document.getElementById('new-course-desc')?.value.trim()||'';try{const{ok,data}=await api('/api/courses',{method:'POST',body:JSON.stringify({name,description:desc})});if(ok){S.courseId=data.id;S.courseName=data.name;updateTopbar();loadCourses();toast('课程创建成功','success');}else toast('创建失败','error');}catch(e){toast('创建失败','error');}};
