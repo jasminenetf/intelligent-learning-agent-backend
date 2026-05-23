@@ -211,11 +211,16 @@ def api_demo_init(session: Session = Depends(get_session)):
         chunks = _chunk_count(int(c.id) if c.id else 0, session)
         ranked.append((c, chunks))
 
-    # Sort: KB courses first (by chunks desc), then non-KB by name match
+    # Sort: AI Intro first, then KB courses (by chunks desc), then non-KB by name match
     def _course_rank(item):
         c, chunks = item
         name = (c.name or "").lower()
         score = 0
+        # AI Introduction gets highest priority
+        if "人工智能导论" in name and chunks > 0:
+            score += 2000 + chunks
+        elif "人工智能" in name and chunks > 0:
+            score += 1500 + chunks
         if chunks > 0:
             score += 1000 + chunks  # KB courses first, more chunks = better
         if "高等数学上" in name:
