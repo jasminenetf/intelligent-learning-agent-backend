@@ -1756,8 +1756,22 @@ window._startCompetition = async function() {
   // Auto-login
   if (!S.token || !S.user) {
     var ok = await initDemo();
-    if (!ok) { toast('演示初始化失败，请确认后端已启动', 'error'); return; }
-    updateTopbar();
+    if (!ok) {
+      // Even if demo-init fails (offline), try to proceed with demo payload
+      if (window.DEMO_PAYLOAD) {
+        S.courseId = 5;
+        S.courseName = '人工智能导论';
+        S.kbReady = true;
+        setToken('demo-offline-token');
+        S.user = {username:'demo'};
+        updateTopbar();
+      } else {
+        toast('演示初始化失败，请确认后端已启动', 'error');
+        return;
+      }
+    } else {
+      updateTopbar();
+    }
   }
   // Transition to flow
   var landing = document.getElementById('competition-landing');
