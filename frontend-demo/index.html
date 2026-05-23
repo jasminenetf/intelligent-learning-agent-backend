@@ -130,23 +130,38 @@
         <div class="comp-chat-messages" id="comp-chat-messages">
           <div class="comp-empty-state">
             <div class="empty-icon">🤖</div>
-            <p>在下方输入你的学习问题</p>
-            <p style="font-size:11px;color:var(--gray-400);margin-top:4px">例如：我在学习人工智能导论，容易混淆过拟合和欠拟合...</p>
+            <p>正在启动学习流程...</p>
           </div>
         </div>
-        <div class="comp-chat-input">
-          <textarea id="comp-chat-input" placeholder="输入你的学习问题..." rows="2"></textarea>
-          <button class="btn btn-primary btn-sm" onclick="_compAsk()">发送</button>
+        <div class="comp-chat-input" id="comp-chat-input-bar">
+          <textarea id="comp-chat-input" placeholder="输入你的学习问题..." rows="2" style="display:none"></textarea>
+          <button class="btn btn-primary btn-sm" id="comp-btn-regenerate" onclick="_compRegenerate()" style="display:none">🔄 重新生成学习方案</button>
         </div>
       </div>
 
       <div class="comp-col comp-col-center">
-        <div class="comp-col-header">📋 学习成果工作区</div>
+        <div class="comp-col-header">
+          <span>📋 学习成果工作区</span>
+          <div class="comp-progress" id="comp-progress" style="display:none">
+            <span class="comp-progress-text" id="comp-progress-text"></span>
+          </div>
+        </div>
+        <div class="comp-workspace-tabs" id="comp-workspace-tabs">
+          <button class="comp-tab active" data-tab="mindmap">🧠 思维导图</button>
+          <button class="comp-tab" data-tab="quiz">📝 练习题库</button>
+          <button class="comp-tab" data-tab="study_plan">🗺️ 学习路径</button>
+          <button class="comp-tab" data-tab="lecture">📄 讲义/PPT</button>
+        </div>
         <div class="comp-workspace" id="comp-workspace">
-          <div class="comp-empty-state">
+          <div class="comp-empty-state" id="comp-ws-empty">
             <div class="empty-icon">📋</div>
-            <p>等待提问生成学习成果</p>
-            <p style="font-size:11px;color:var(--gray-400);margin-top:4px">思维导图、测验、学习路径将在此展示</p>
+            <p>等待生成学习成果</p>
+          </div>
+          <div class="comp-tab-panel" id="comp-panel-mindmap" style="display:none"></div>
+          <div class="comp-tab-panel" id="comp-panel-quiz" style="display:none"></div>
+          <div class="comp-tab-panel" id="comp-panel-study_plan" style="display:none"></div>
+          <div class="comp-tab-panel" id="comp-panel-lecture" style="display:none">
+            <div class="comp-empty-state"><div class="empty-icon">📊</div><p>讲义 与 PPT 学习包将在下一阶段生成</p></div>
           </div>
         </div>
       </div>

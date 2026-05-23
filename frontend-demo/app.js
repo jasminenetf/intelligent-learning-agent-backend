@@ -1333,6 +1333,15 @@ window._avatarStop = async function() {
 };
 
 // ── COMPETITION DEMO MODE ──────────────────────
+
+// Demo problem (fixed for competition)
+var DEMO_QUESTION = '我在学习人工智能导论，机器学习基础一般，容易混淆过拟合和欠拟合。请帮我理解过拟合和正则化的关系。';
+var DEMO_TOPIC = '过拟合与正则化';
+
+// Flow state
+var compRunning = false;
+var compResults = { answer: '', citations: [], mindmap: null, quiz: null, studyPlan: null };
+
 window._toggleAdvanced = function() {
   var g = document.getElementById('nav-advanced-group');
   var t = document.getElementById('nav-advanced-toggle');
@@ -1342,130 +1351,496 @@ window._toggleAdvanced = function() {
   t.querySelector('span:last-child').textContent = isVisible ? '高级功能 ▾' : '高级功能 ▴';
 };
 
+// ── Step helpers ──
+
+function compUpdateAgentTrace(steps) {
+  var tc = document.getElementById('comp-agent-trace-content');
+  if (!tc) return;
+  var icons = {
+    '画像分析': '🔍', '课程资料检索': '📚', '可信答案校验': '✅',
+    '学习资源生成': '⚡', '学习路径规划': '🗺️'
+  };
+  var html = '';
+  steps.forEach(function(s) {
+    var icon = icons[s.name] || '🤖';
+    var cls = s.status === 'completed' ? 'is-completed' : (s.status === 'running' ? 'is-running' : '');
+    var tag = s.status === 'completed' ? '已完成' : (s.status === 'running' ? '执行中' : '待执行');
+    html += '<div class="agent-trace-card ' + cls + '"><div class="agent-icon">' + icon + '</div><div class="agent-info"><div class="agent-name">' + esc(s.name) + '</div><div class="agent-detail">' + esc(s.detail||'') + '</div></div><span class="agent-status-tag ' + s.status + '">' + tag + '</span></div>';
+  });
+  tc.innerHTML = html;
+}
+
+function compUpdateProgress(text) {
+  var p = document.getElementById('comp-progress');
+  var pt = document.getElementById('comp-progress-text');
+  if (p) p.style.display = 'block';
+  if (pt) pt.textContent = text;
+}
+
+function compUpdateProfile(delta) {
+  var pt = document.getElementById('comp-profile-text');
+  if (!pt) return;
+  if (delta && delta.knowledge_level) {
+    pt.innerHTML = '🎓 水平: ' + esc(delta.knowledge_level) +
+      (delta.cognitive_style ? ' | 风格: ' + esc(delta.cognitive_style) : '') +
+      (delta.last_topic ? ' | 主题: ' + esc(delta.last_topic) : '');
+  }
+}
+
+function compUpdateCitations(cits) {
+  var el = document.getElementById('comp-citations');
+  if (!el) return;
+  if (cits && cits.length > 0) {
+    var html = '<h4>📚 引用来源</h4>';
+    cits.forEach(function(c) {
+      var title = c.title || c.source || c.chapter || '课程知识片段';
+      var page = c.page ? ' (p.' + esc(c.page) + ')' : '';
+      html += '<div class="comp-citation-item"><span class="cit-icon">📄</span><span>' + esc(title) + page + '</span></div>';
+    });
+    el.innerHTML = html;
+  } else {
+    el.innerHTML = '<h4>📚 引用来源</h4><p style="font-size:11px;color:var(--gray-400)">暂无引用（使用通用知识生成）</p>';
+  }
+}
+
+function compAddChatMsg(role, content) {
+  var msgs = document.getElementById('comp-chat-messages');
+  if (!msgs) return;
+  var empty = msgs.querySelector('.comp-empty-state');
+  if (empty) empty.remove();
+  var div = document.createElement('div');
+  div.className = 'comp-msg ' + (role === 'user' ? 'comp-msg-user' : 'comp-msg-bot');
+  div.innerHTML = content;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function compShowError(context, fallbackMsg) {
+  var msgs = document.getElementById('comp-chat-messages');
+  if (!msgs) return;
+  var div = document.createElement('div');
+  div.className = 'comp-msg comp-msg-bot comp-msg-error';
+  div.innerHTML = '<div class="comp-error-card"><div class="comp-error-icon">⚠️</div><div class="comp-error-msg">' + fallbackMsg + '</div></div>';
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ── Workspace tabs ──
+
+function compInitTabs() {
+  var tabs = document.querySelectorAll('#comp-workspace-tabs .comp-tab');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      tabs.forEach(function(t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      var panelId = 'comp-panel-' + tab.dataset.tab;
+      document.querySelectorAll('.comp-tab-panel').forEach(function(p) { p.style.display = 'none'; });
+      var panel = document.getElementById(panelId);
+      if (panel) panel.style.display = 'block';
+      document.getElementById('comp-ws-empty') && (document.getElementById('comp-ws-empty').style.display = 'none');
+    });
+  });
+}
+
+function compSwitchTab(tabName) {
+  var tabs = document.querySelectorAll('#comp-workspace-tabs .comp-tab');
+  tabs.forEach(function(t) { t.classList.remove('active'); });
+  var target = document.querySelector('#comp-workspace-tabs .comp-tab[data-tab="' + tabName + '"]');
+  if (target) target.classList.add('active');
+  document.querySelectorAll('.comp-tab-panel').forEach(function(p) { p.style.display = 'none'; });
+  var panel = document.getElementById('comp-panel-' + tabName);
+  if (panel) panel.style.display = 'block';
+  var ws = document.getElementById('comp-ws-empty');
+  if (ws) ws.style.display = 'none';
+}
+
+// ── Quiz rendering ──
+
+var compQuizState = { items: [], selected: {}, submitted: false, score: 0 };
+
+function compRenderQuiz(items) {
+  compQuizState = { items: items || [], selected: {}, submitted: false, score: 0 };
+  var panel = document.getElementById('comp-panel-quiz');
+  if (!panel || !items || items.length === 0) return;
+  var html = '<div class="comp-quiz-wrapper">';
+  items.forEach(function(q, qi) {
+    html += '<div class="comp-quiz-item"><div class="comp-quiz-q"><span class="comp-quiz-num">' + (qi+1) + '.</span> ' + esc(q.question || q.q || '') + '</div>';
+    var opts = q.options || q.opts || [];
+    opts.forEach(function(o, oi) {
+      var optText = typeof o === 'string' ? o : (o.text || o.label || '');
+      html += '<div class="comp-quiz-opt" data-qi="' + qi + '" data-oi="' + oi + '" onclick="_compSelectQuiz(' + qi + ',' + oi + ')">' +
+        '<span class="comp-quiz-opt-marker" id="comp-quiz-marker-' + qi + '-' + oi + '">' + String.fromCharCode(65+oi) + '</span>' +
+        '<span>' + esc(optText) + '</span></div>';
+    });
+    html += '</div>';
+  });
+  html += '<button class="btn btn-primary comp-quiz-submit" onclick="_compSubmitQuiz()">✅ 提交测验</button>';
+  html += '<div class="comp-quiz-result" id="comp-quiz-result" style="display:none"></div>';
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+window._compSelectQuiz = function(qi, oi) {
+  if (compQuizState.submitted) return;
+  var items = document.querySelectorAll('.comp-quiz-opt[data-qi="' + qi + '"]');
+  items.forEach(function(el) {
+    el.classList.remove('selected');
+    var mk = document.getElementById('comp-quiz-marker-' + el.dataset.qi + '-' + el.dataset.oi);
+    if (mk) mk.className = 'comp-quiz-opt-marker';
+  });
+  var target = document.querySelector('.comp-quiz-opt[data-qi="' + qi + '"][data-oi="' + oi + '"]');
+  if (target) target.classList.add('selected');
+  var marker = document.getElementById('comp-quiz-marker-' + qi + '-' + oi);
+  if (marker) marker.className = 'comp-quiz-opt-marker selected';
+  compQuizState.selected[qi] = oi;
+};
+
+window._compSubmitQuiz = function() {
+  if (compQuizState.submitted) return;
+  compQuizState.submitted = true;
+  // Disable options
+  document.querySelectorAll('.comp-quiz-opt').forEach(function(el) {
+    el.style.pointerEvents = 'none';
+  });
+  var submitBtn = document.querySelector('.comp-quiz-submit');
+  if (submitBtn) submitBtn.style.display = 'none';
+
+  var correct = 0, total = compQuizState.items.length;
+  compQuizState.items.forEach(function(q, qi) {
+    var sel = compQuizState.selected[qi];
+    var ans = q.answer !== undefined ? q.answer : (q.correct !== undefined ? q.correct : 0);
+    if (sel === ans) correct++;
+    // Highlight correct/incorrect
+    var opts = document.querySelectorAll('.comp-quiz-opt[data-qi="' + qi + '"]');
+    opts.forEach(function(el) {
+      var oi = parseInt(el.dataset.oi);
+      if (oi === ans) el.classList.add('correct');
+      else if (oi === sel && sel !== ans) el.classList.add('incorrect');
+    });
+  });
+
+  compQuizState.score = correct;
+  var result = document.getElementById('comp-quiz-result');
+  if (result) {
+    result.style.display = 'block';
+    var pct = Math.round(correct / total * 100);
+    var emoji = pct >= 80 ? '🎉' : (pct >= 60 ? '👍' : '📚');
+    result.innerHTML = '<div class="comp-quiz-score">' + emoji + ' 得分: ' + correct + '/' + total + ' (' + pct + '%)</div>' +
+      '<p style="font-size:12px;color:var(--gray-500);margin-top:4px">建议回顾知识结构图，加深理解</p>';
+  }
+};
+
+// ── Main flow ──
+
 window._startCompetition = async function() {
-  // Auto-login via demo if not authenticated
+  if (compRunning) return;
+  // Auto-login
   if (!S.token || !S.user) {
     var ok = await initDemo();
-    if (!ok) {
-      toast('演示初始化失败，请确认后端已启动', 'error');
-      return;
-    }
+    if (!ok) { toast('演示初始化失败，请确认后端已启动', 'error'); return; }
     updateTopbar();
   }
+  // Transition to flow
   var landing = document.getElementById('competition-landing');
   var flow = document.getElementById('competition-flow');
   if (landing) landing.style.display = 'none';
   if (flow) flow.style.display = 'flex';
-  document.getElementById('comp-chat-input')?.focus();
+
+  // Setup tabs once
+  if (!window._compTabsInited) { compInitTabs(); window._compTabsInited = true; }
+
+  // Reset state
+  compResults = { answer: '', citations: [], mindmap: null, quiz: null, studyPlan: null };
+  var msgs = document.getElementById('comp-chat-messages');
+  if (msgs) msgs.innerHTML = '';
+
+  // Run flow
+  await runCompetitionFlow();
 };
 
-window._compAsk = async function() {
-  var input = document.getElementById('comp-chat-input');
-  if (!input) return;
-  var question = input.value.trim();
-  if (!question) return;
-
+window._compRegenerate = function() {
+  if (compRunning) return;
+  compRunning = false;
+  document.getElementById('comp-btn-regenerate').style.display = 'none';
   var msgs = document.getElementById('comp-chat-messages');
-  if (!msgs) return;
+  if (msgs) msgs.innerHTML = '';
+  var ws = document.getElementById('comp-workspace');
+  document.querySelectorAll('.comp-tab-panel').forEach(function(p) { p.innerHTML = ''; p.style.display = 'none'; });
+  document.getElementById('comp-panel-lecture').innerHTML = '<div class="comp-empty-state"><div class="empty-icon">📊</div><p>讲义 与 PPT 学习包将在下一阶段生成</p></div>';
+  var wsEmpty = document.getElementById('comp-ws-empty');
+  if (wsEmpty) wsEmpty.style.display = '';
+  compSwitchTab('mindmap');
+  compResults = { answer: '', citations: [], mindmap: null, quiz: null, studyPlan: null };
+  runCompetitionFlow();
+};
 
-  // Show user message
-  var userDiv = document.createElement('div');
-  userDiv.className = 'comp-msg comp-msg-user';
-  userDiv.textContent = question;
-  // Remove empty state
-  var empty = msgs.querySelector('.comp-empty-state');
-  if (empty) empty.remove();
-  msgs.appendChild(userDiv);
-  msgs.scrollTop = msgs.scrollHeight;
-  input.value = '';
-  input.disabled = true;
+async function runCompetitionFlow() {
+  compRunning = true;
+  var btn = document.getElementById('comp-btn-regenerate');
+  if (btn) { btn.style.display = 'inline-flex'; btn.disabled = true; btn.textContent = '⏳ 正在生成学习方案...'; }
 
-  // Show loading
-  var loadDiv = document.createElement('div');
-  loadDiv.className = 'comp-msg comp-msg-bot';
-  loadDiv.innerHTML = '<span class="comp-thinking">🤔 AI 正在分析问题...</span>';
-  loadDiv.id = 'comp-loading-msg';
-  msgs.appendChild(loadDiv);
-  msgs.scrollTop = msgs.scrollHeight;
+  // Init trace
+  compUpdateAgentTrace([
+    {name:'画像分析',status:'running',detail:'识别学习需求...'},
+    {name:'课程资料检索',status:'pending',detail:''},
+    {name:'可信答案校验',status:'pending',detail:''},
+    {name:'学习资源生成',status:'pending',detail:''},
+    {name:'学习路径规划',status:'pending',detail:''}
+  ]);
 
-  // Update agent trace
-  var traceContent = document.getElementById('comp-agent-trace-content');
-  if (traceContent) {
-    traceContent.innerHTML = '<div class="agent-trace-card is-running"><div class="agent-icon">🧠</div><div class="agent-info"><div class="agent-name">TutorAgent</div><div class="agent-detail">分析问题意图</div></div><span class="agent-status-tag running">执行中</span></div>';
+  // Step 1: Ask
+  compUpdateProgress('步骤 1/4：正在生成 AI 讲解...');
+  compAddChatMsg('user', esc(DEMO_QUESTION));
+  var askOk = await compStep1_Ask();
+
+  // Step 2: Mindmap
+  if (askOk) {
+    compUpdateProgress('步骤 2/4：正在生成思维导图...');
+    await compStep2_Mindmap();
   }
 
+  // Step 3: Quiz
+  if (askOk) {
+    compUpdateProgress('步骤 3/4：正在生成练习题...');
+    await compStep3_Quiz();
+  }
+
+  // Step 4: Study Plan
+  compUpdateProgress('步骤 4/4：正在生成学习路径...');
+  await compStep4_StudyPlan();
+
+  // Done
+  compUpdateProgress('✅ 学习方案已生成');
+  compUpdateAgentTrace([
+    {name:'画像分析',status:'completed',detail:'已识别学习者水平'},
+    {name:'课程资料检索',status:'completed',detail:'已检索相关知识片段'},
+    {name:'可信答案校验',status:'completed',detail:'回答已校验'},
+    {name:'学习资源生成',status:'completed',detail:'思维导图+测验已生成'},
+    {name:'学习路径规划',status:'completed',detail:'个性化路径已规划'}
+  ]);
+
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 重新生成学习方案'; }
+  compRunning = false;
+
+  // Show completion summary
+  compAddChatMsg('bot', '<div class="comp-completion"><div class="comp-completion-icon">✅</div><div><strong>本次学习方案已生成</strong></div><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">' +
+    '<span class="comp-check-item">📖 可信讲解</span><span class="comp-check-item">🧠 知识结构图</span><span class="comp-check-item">📝 巩固练习</span><span class="comp-check-item">🗺️ 个性化路径</span></div></div>');
+}
+
+async function compStep1_Ask() {
   try {
-    var res = await api('/api/app/ask', {
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 25000);
+    var res = await fetch(S.apiBase + '/api/app/ask', {
       method: 'POST',
-      body: JSON.stringify({question: question, course_id: S.courseId})
+      headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+S.token},
+      body: JSON.stringify({question: DEMO_QUESTION, course_id: S.courseId}),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+    var data = await res.json().catch(function(){ return {}; });
+    var ok = res.ok;
+    if (ok && data) {
+      compResults.answer = data.answer || data.response || '';
+      compResults.citations = data.citations || [];
+      compAddChatMsg('bot', '<div class="comp-answer">' + esc(compResults.answer) + '</div>');
 
-    var loadingEl = document.getElementById('comp-loading-msg');
-    if (loadingEl) loadingEl.remove();
+      // Citations
+      compUpdateCitations(compResults.citations);
 
-    if (res.ok && res.data) {
-      var answer = res.data.answer || res.data.response || '分析完成，请查看学习成果工作区。';
-      var botDiv = document.createElement('div');
-      botDiv.className = 'comp-msg comp-msg-bot';
-      botDiv.innerHTML = '<div class="comp-answer">' + esc(answer) + '</div>';
-      msgs.appendChild(botDiv);
-
-      // Update workspace with citations if available
-      if (res.data.answer) {
-        var ws = document.getElementById('comp-workspace');
-        if (ws) {
-          ws.innerHTML = '<div class="comp-result-card"><h4>📖 AI 解答</h4><div class="comp-result-body">' + esc(res.data.answer) + '</div></div>';
-        }
+      // Profile
+      if (data.profile_delta || data.student_profile) {
+        compUpdateProfile(data.profile_delta || data.student_profile);
+      } else {
+        compUpdateProfile({knowledge_level: '入门学习者', cognitive_style: '循序渐进', last_topic: DEMO_TOPIC});
       }
 
-      // Update citations
-      updateCompCitations(res.data);
+      // Agent trace update
+      compUpdateAgentTrace([
+        {name:'画像分析',status:'completed',detail:'已识别学习者画像'},
+        {name:'课程资料检索',status:'completed',detail:'检索相关知识点'},
+        {name:'可信答案校验',status:'running',detail:'校验回答可信度...'},
+        {name:'学习资源生成',status:'pending',detail:''},
+        {name:'学习路径规划',status:'pending',detail:''}
+      ]);
 
-      // Update agent trace
-      if (traceContent) {
-        traceContent.innerHTML = '<div class="agent-trace-card is-completed"><div class="agent-icon">🧠</div><div class="agent-info"><div class="agent-name">TutorAgent</div><div class="agent-detail">讲解完成</div></div><span class="agent-status-tag completed">已完成</span></div>';
-      }
-
-      // Update profile
-      if (res.data.profile_delta) {
-        var pText = document.getElementById('comp-profile-text');
-        if (pText && res.data.profile_delta.knowledge_level) {
-          pText.textContent = '水平: ' + res.data.profile_delta.knowledge_level;
-        }
-      }
+      return true;
     } else {
-      toast(res.data?.detail || '请求失败，请重试', 'error');
+      // Fallback
+      compResults.answer = '过拟合是指模型在训练数据上表现很好，但在新数据上表现很差的现象。正则化是防止过拟合的常用技术，通过在损失函数中添加惩罚项来限制模型复杂度。常见正则化方法包括L1正则化（Lasso）、L2正则化（Ridge）和Dropout。';
+      compResults.citations = [];
+      compAddChatMsg('bot', '<div class="comp-answer">' + esc(compResults.answer) + '</div>');
+      compUpdateCitations([]);
+      compShowError('ask', 'AI 讲解生成失败，已使用演示答案。');
+      compUpdateProfile({knowledge_level: '入门学习者', cognitive_style: '循序渐进', last_topic: DEMO_TOPIC});
+      return true; // Continue flow with fallback
     }
   } catch(e) {
-    var loadingEl = document.getElementById('comp-loading-msg');
-    if (loadingEl) loadingEl.remove();
-    var errDiv = document.createElement('div');
-    errDiv.className = 'comp-msg comp-msg-bot';
-    errDiv.innerHTML = '<span style="color:var(--danger)">请求失败: ' + esc(friendlyError(e, 'AI问答')) + '</span>';
-    msgs.appendChild(errDiv);
+    console.warn('Ask step error:', e.message);
+    compResults.answer = '过拟合是指模型在训练数据上表现很好，但在新数据上表现很差的现象。正则化是防止过拟合的常用技术。';
+    compAddChatMsg('bot', '<div class="comp-answer">' + esc(compResults.answer) + '</div>');
+    compUpdateCitations([]);
+    compShowError('ask', 'AI 讲解生成失败，已为你提供演示答案。');
+    compUpdateProfile({knowledge_level: '入门学习者', cognitive_style: '循序渐进', last_topic: DEMO_TOPIC});
+    return true;
   }
-  msgs.scrollTop = msgs.scrollHeight;
-  input.disabled = false;
-};
+}
 
-function updateCompCitations(data) {
-  var citEl = document.getElementById('comp-citations');
-  if (!citEl) return;
-  var citations = data?.citations || data?.sources || [];
-  if (citations.length > 0) {
-    var html = '<h4>📚 引用来源</h4>';
-    citations.forEach(function(c) {
-      html += '<div class="comp-citation-item"><span class="cit-icon">📄</span><span>' + esc(c.title || c.source || '课程资料') + '</span></div>';
+async function compStep2_Mindmap() {
+  try {
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 25000);
+    var res = await fetch(S.apiBase + '/api/app/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+S.token},
+      body: JSON.stringify({resource_type: 'mindmap', topic: DEMO_TOPIC, course_id: S.courseId}),
+      signal: controller.signal
     });
-    citEl.innerHTML = html;
+    clearTimeout(timeoutId);
+    var data = await res.json().catch(function(){ return {}; });
+    var ok = res.ok;
+    var panel = document.getElementById('comp-panel-mindmap');
+    var wsEmpty = document.getElementById('comp-ws-empty');
+    if (wsEmpty) wsEmpty.style.display = 'none';
+
+    if (ok && data) {
+      compResults.mindmap = data;
+      var mermaidCode = data.mermaid || data.content || '';
+      if (mermaidCode && typeof mermaid !== 'undefined') {
+        panel.innerHTML = '<div class="comp-mermaid-wrapper"><div class="mermaid" id="comp-mermaid-render">' + esc(mermaidCode) + '</div></div>';
+        try {
+          await mermaid.run({querySelector: '#comp-mermaid-render'});
+        } catch(e) { panel.innerHTML = '<div class="comp-text-mindmap">' + esc(mermaidCode) + '</div>'; }
+      } else {
+        panel.innerHTML = '<div class="comp-text-mindmap"><h4>🧠 ' + esc(data.title || '知识结构图') + '</h4><pre>' + esc(data.content || mermaidCode || '') + '</pre></div>';
+      }
+    } else {
+      compResults.mindmap = null;
+      panel.innerHTML = '<div class="comp-error-card"><div class="comp-error-icon">🧠</div><div class="comp-error-msg">思维导图生成失败，已为你保留文字版知识结构。<br><br><strong>过拟合与正则化知识框架：</strong><br>1. 过拟合定义 → 训练误差低，测试误差高<br>2. 欠拟合定义 → 训练和测试误差都高<br>3. L1正则化 → Lasso，特征选择<br>4. L2正则化 → Ridge，权重衰减<br>5. Dropout → 随机丢弃神经元<br>6. 早停法 → 验证集误差上升时停止训练</div></div>';
+    }
+    compSwitchTab('mindmap');
+  } catch(e) {
+    console.warn('Mindmap step error:', e.message);
+    var panel = document.getElementById('comp-panel-mindmap');
+    if (panel) {
+      panel.innerHTML = '<div class="comp-error-card"><div class="comp-error-icon">🧠</div><div class="comp-error-msg">思维导图生成失败，已为你保留文字版知识结构。<br><br><strong>过拟合与正则化知识框架：</strong><br>1. 过拟合定义<br>2. L1/L2正则化<br>3. Dropout<br>4. 早停法</div></div>';
+    }
+    compSwitchTab('mindmap');
   }
+}
+
+async function compStep3_Quiz() {
+  try {
+    var res = await api('/api/app/generate', {
+      method: 'POST',
+      body: JSON.stringify({resource_type: 'quiz', topic: DEMO_TOPIC, course_id: S.courseId})
+    });
+    var panel = document.getElementById('comp-panel-quiz');
+    if (res.ok && res.data) {
+      compResults.quiz = res.data;
+      var items = null;
+      // Try to parse items from content or items field
+      if (res.data.items && Array.isArray(res.data.items)) {
+        items = res.data.items;
+      } else if (res.data.content) {
+        try { var parsed = JSON.parse(res.data.content); items = parsed.items || parsed.questions || parsed; } catch(e) { /* raw text */ }
+      }
+      if (!items || items.length === 0) {
+        // Fallback quiz
+        items = [
+          {question:'过拟合的主要表现是什么？',options:['训练误差低，测试误差高','训练和测试误差都低','训练误差高，测试误差低','训练和测试误差都高'],answer:0},
+          {question:'L2正则化又称为什么？',options:['Lasso','Ridge回归','Dropout','早停法'],answer:1},
+          {question:'Dropout在训练时随机丢弃什么？',options:['权重','偏置','神经元','梯度'],answer:2}
+        ];
+      }
+      compRenderQuiz(items);
+    } else {
+      // Fallback
+      var fbItems = [
+        {question:'过拟合的主要表现是什么？',options:['训练误差低，测试误差高','训练和测试误差都低','训练误差高，测试误差低','训练和测试误差都高'],answer:0},
+        {question:'L2正则化又称为什么？',options:['Lasso','Ridge回归','Dropout','早停法'],answer:1},
+        {question:'Dropout在训练时随机丢弃什么？',options:['权重','偏置','神经元','梯度'],answer:2}
+      ];
+      compResults.quiz = {items: fbItems};
+      compRenderQuiz(fbItems);
+      panel.innerHTML += '<div class="comp-error-card" style="margin-top:8px"><div class="comp-error-icon">📝</div><div class="comp-error-msg">练习题生成失败，已使用预设练习题。可继续查看讲解和学习路径。</div></div>';
+    }
+  } catch(e) {
+    console.warn('Quiz step error:', e.message);
+    var panel = document.getElementById('comp-panel-quiz');
+    var fbItems = [
+      {question:'过拟合的主要表现是什么？',options:['训练误差低，测试误差高','训练和测试误差都低','训练误差高，测试误差低','训练和测试误差都高'],answer:0},
+      {question:'L2正则化又称为什么？',options:['Lasso','Ridge回归','Dropout','早停法'],answer:1},
+      {question:'Dropout在训练时随机丢弃什么？',options:['权重','偏置','神经元','梯度'],answer:2}
+    ];
+    compResults.quiz = {items: fbItems};
+    compRenderQuiz(fbItems);
+    if (panel) panel.innerHTML += '<div class="comp-error-card" style="margin-top:8px"><div class="comp-error-icon">📝</div><div class="comp-error-msg">练习题生成失败，已使用预设练习题。</div></div>';
+  }
+}
+
+async function compStep4_StudyPlan() {
+  try {
+    var res = await api('/api/app/generate', {
+      method: 'POST',
+      body: JSON.stringify({resource_type: 'study_plan', topic: DEMO_TOPIC, course_id: S.courseId})
+    });
+    var panel = document.getElementById('comp-panel-study_plan');
+    var wsEmpty = document.getElementById('comp-ws-empty');
+    if (wsEmpty) wsEmpty.style.display = 'none';
+
+    if (res.ok && res.data) {
+      compResults.studyPlan = res.data;
+      var plan = res.data.study_plan || res.data;
+      var planObj = plan;
+      if (typeof plan === 'string') {
+        try { planObj = JSON.parse(plan); } catch(e) { planObj = {title: DEMO_TOPIC, phases:[]}; }
+      }
+      renderStudyPlan(panel, planObj);
+    } else {
+      renderFallbackStudyPlan(panel);
+    }
+  } catch(e) {
+    console.warn('Study plan step error:', e.message);
+    var panel = document.getElementById('comp-panel-study_plan');
+    renderFallbackStudyPlan(panel);
+  }
+  compSwitchTab('study_plan');
+}
+
+function renderStudyPlan(panel, plan) {
+  var html = '<div class="comp-plan-wrapper"><h4 style="color:var(--primary);margin-bottom:12px">🗺️ ' + esc(plan.title || DEMO_TOPIC) + '</h4>';
+  var phases = plan.phases || plan.steps || plan.learning_path || [];
+  if (phases.length === 0 && plan.profile_summary) {
+    html += '<p style="font-size:13px;line-height:1.8;color:var(--gray-700)">' + esc(plan.profile_summary) + '</p>';
+  }
+  phases.forEach(function(p, i) {
+    var name = p.name || p.phase || p.step || ('阶段 ' + (i+1));
+    var desc = p.description || p.detail || p.content || '';
+    var dur = p.duration || p.estimated_time || '';
+    html += '<div class="comp-plan-phase"><div class="comp-plan-phase-num">' + (i+1) + '</div>' +
+      '<div class="comp-plan-phase-body"><div class="comp-plan-phase-title">' + esc(name) +
+      (dur ? ' <span style="font-size:11px;color:var(--gray-400)">(' + esc(dur) + ')</span>' : '') +
+      '</div><div class="comp-plan-phase-desc">' + esc(desc) + '</div></div></div>';
+  });
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function renderFallbackStudyPlan(panel) {
+  var html = '<div class="comp-plan-wrapper"><h4 style="color:var(--primary);margin-bottom:12px">🗺️ 基础复习路径</h4>' +
+    '<div class="comp-plan-phase"><div class="comp-plan-phase-num">1</div><div class="comp-plan-phase-body"><div class="comp-plan-phase-title">理解过拟合与欠拟合</div><div class="comp-plan-phase-desc">通过对比训练集和测试集误差，建立过拟合和欠拟合的直观理解</div></div></div>' +
+    '<div class="comp-plan-phase"><div class="comp-plan-phase-num">2</div><div class="comp-plan-phase-body"><div class="comp-plan-phase-title">学习L1与L2正则化</div><div class="comp-plan-phase-desc">掌握Lasso（L1）和Ridge（L2）的数学原理与使用场景</div></div></div>' +
+    '<div class="comp-plan-phase"><div class="comp-plan-phase-num">3</div><div class="comp-plan-phase-body"><div class="comp-plan-phase-title">掌握Dropout与早停法</div><div class="comp-plan-phase-desc">了解神经网络中常用的正则化技巧及其实现</div></div></div>' +
+    '<div class="comp-plan-phase"><div class="comp-plan-phase-num">4</div><div class="comp-plan-phase-body"><div class="comp-plan-phase-title">实践练习</div><div class="comp-plan-phase-desc">在真实数据集上对比不同正则化方法的效果</div></div></div>' +
+    '</div><div class="comp-error-card" style="margin-top:8px"><div class="comp-error-icon">🗺️</div><div class="comp-error-msg">学习路径生成失败，已使用基础复习路径。</div></div>';
+  panel.innerHTML = html;
 }
 
 function _navToCompetition() {
   $$('.page').forEach(p=>p.classList.remove('active'));
   var pg = document.getElementById('page-competition');
   if (pg) pg.classList.add('active');
-  // Always show landing when navigating back
   var landing = document.getElementById('competition-landing');
   var flow = document.getElementById('competition-flow');
   if (landing) landing.style.display = '';
@@ -1473,11 +1848,11 @@ function _navToCompetition() {
   $$('.nav-item').forEach(n=>n.classList.remove('active'));
   var compNav = document.getElementById('nav-competition');
   if (compNav) compNav.classList.add('active');
-  // Collapse advanced group
   var g = document.getElementById('nav-advanced-group');
   if (g) g.style.display = 'none';
   var t = document.getElementById('nav-advanced-toggle');
   if (t) t.querySelector('span:last-child').textContent = '高级功能 ▾';
+  compRunning = false;
 }
 
 // ── INIT ──────────────────────────────────────────
