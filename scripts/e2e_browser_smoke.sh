@@ -1,66 +1,79 @@
-#!/bin/bash
-# E2E Browser Smoke Test
-# Usage: bash scripts/e2e_browser_smoke.sh
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "=== Stopping old services ==="
-bash scripts/stop_app.sh 2>/dev/null || true
-sleep 2
+echo "============================================"
+echo " E2E Browser Smoke Test"
+echo "============================================"
 
-echo "=== Starting backend ==="
+# ── 1. Stop old services ──
+echo "[1/6] Stopping old services..."
+bash scripts/stop_app.sh 2>/dev/null || true
+sleep 1
+
+# ── 2. Start backend ──
+echo "[2/6] Starting backend..."
 cd backend
-HF_HUB_OFFLINE=1 python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+source .env 2>/dev/null || true
+python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
 BACKEND_PID=$!
 cd "$ROOT"
+echo "  Backend PID: $BACKEND_PID"
 
-echo "=== Waiting for backend ==="
+# ── 3. Start frontend ──
+echo "[3/6] Starting frontend..."
+cd frontend-demo
+python3 -m http.server 5173 &
+FRONTEND_PID=$!
+cd "$ROOT"
+echo "  Frontend PID: $FRONTEND_PID"
+
+# ── 4. Wait for services ──
+echo "[4/6] Waiting for services..."
 for i in $(seq 1 30); do
-  if curl -s http://127.0.0.1:8000/health > /dev/null 2>&1; then
-    echo "Backend ready"
+  if curl -s -o /dev/null http://127.0.0.1:8000/health 2>/dev/null; then
+    echo "  Backend OK"
     break
   fi
   sleep 1
 done
 
-echo "=== Checking frontend ==="
-curl -sI --max-time 5 http://127.0.0.1:5173 > /dev/null 2>&1 || {
-  echo "WARNING: Frontend not detected on :5173. Starting vite..."
-  cd frontend-demo
-  npx vite --host 127.0.0.1 --port 5173 &
-  FRONTEND_PID=$!
-  cd "$ROOT"
-  sleep 5
-}
+for i in $(seq 1 30); do
+  if curl -s -o /dev/null -I http://127.0.0.1:5173 2>/dev/null; then
+    echo "  Frontend OK"
+    break
+  fi
+  sleep 1
+done
 
-echo "=== Running E2E tests ==="
+# ── 5. Install Playwright ──
+echo "[5/6] Installing Playwright..."
 cd tests/e2e
-
-if [ ! -d "node_modules" ]; then
-  echo "Installing Playwright..."
-  npm install
-  npx playwright install chromium --with-deps 2>/dev/null || {
-    echo "WARNING: Could not install Playwright browsers."
-    echo "This environment may not support headless Chrome."
-    echo "Skipping E2E tests."
-    exit 0
-  }
-fi
-
-npm test
-TEST_EXIT=$?
-
+npm install --silent 2>&1 | tail -1
+npx playwright install chromium 2>&1 | tail -3
 cd "$ROOT"
 
-echo "=== Stopping services ==="
+# ── 6. Run tests ──
+echo "[6/6] Running E2E tests..."
+cd tests/e2e
+npx playwright test demo-auto-flow.spec.js 2>&1
+TEST_RESULT=$?
+cd "$ROOT"
+
+echo ""
+echo "============================================"
+if [ $TEST_RESULT -eq 0 ]; then
+  echo "✅ E2E TESTS PASSED"
+else
+  echo "❌ E2E TESTS FAILED (exit code: $TEST_RESULT)"
+fi
+echo "============================================"
+
+# Cleanup
 kill $BACKEND_PID 2>/dev/null || true
 kill $FRONTEND_PID 2>/dev/null || true
 
-if [ $TEST_EXIT -ne 0 ]; then
-  echo "E2E TESTS FAILED (exit $TEST_EXIT)"
-  exit $TEST_EXIT
-fi
-
-echo "E2E TESTS PASSED"
+echo "Report: tests/e2e/playwright-report/index.html"
+exit $TEST_RESULT

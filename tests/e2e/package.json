@@ -4,11 +4,12 @@
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
-    "test:dashboard": "playwright test dashboard.spec.js",
-    "test:assistant": "playwright test assistant-flow.spec.js",
-    "test:resource": "playwright test resource-flow.spec.js"
+    "test:debug": "playwright test --debug",
+    "test:demo": "playwright test demo-auto-flow.spec.js",
+    "test:demo:headed": "playwright test demo-auto-flow.spec.js --headed",
+    "report": "playwright show-report"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0"
+    "@playwright/test": "^1.48.0"
   }
 }
