@@ -1360,12 +1360,24 @@ function compUpdateAgentTrace(steps) {
     '画像分析': '🔍', '课程资料检索': '📚', '可信答案校验': '✅',
     '学习资源生成': '⚡', '学习路径规划': '🗺️'
   };
+  var descriptions = {
+    '画像分析': '识别你的学习基础、目标和偏好',
+    '课程资料检索': '从课程知识库中查找相关内容',
+    '可信答案校验': '检查回答是否有资料依据',
+    '学习资源生成': '生成导图、测验和学习路径',
+    '学习路径规划': '根据你的薄弱点规划学习顺序'
+  };
   var html = '';
   steps.forEach(function(s) {
     var icon = icons[s.name] || '🤖';
-    var cls = s.status === 'completed' ? 'is-completed' : (s.status === 'running' ? 'is-running' : '');
-    var tag = s.status === 'completed' ? '已完成' : (s.status === 'running' ? '执行中' : '待执行');
-    html += '<div class="agent-trace-card ' + cls + '"><div class="agent-icon">' + icon + '</div><div class="agent-info"><div class="agent-name">' + esc(s.name) + '</div><div class="agent-detail">' + esc(s.detail||'') + '</div></div><span class="agent-status-tag ' + s.status + '">' + tag + '</span></div>';
+    var cls = s.status === 'completed' ? 'is-completed' : (s.status === 'running' ? 'is-running' : (s.status === 'failed' ? 'is-failed' : ''));
+    var tag = s.status === 'completed' ? '已完成' : (s.status === 'running' ? '执行中' : (s.status === 'failed' ? '已降级处理' : '待执行'));
+    var detail = s.detail || descriptions[s.name] || '';
+    html += '<div class="agent-trace-card ' + cls + '" data-testid="agent-step">' +
+      '<div class="agent-icon">' + icon + '</div>' +
+      '<div class="agent-info"><div class="agent-name">' + esc(s.name) + '</div>' +
+      '<div class="agent-detail">' + esc(detail) + '</div></div>' +
+      '<span class="agent-status-tag ' + s.status + '">' + tag + '</span></div>';
   });
   tc.innerHTML = html;
 }
@@ -1391,17 +1403,33 @@ function compUpdateCitations(cits) {
   var el = document.getElementById('comp-citations');
   if (!el) return;
   if (cits && cits.length > 0) {
-    var html = '<h4>📚 引用来源</h4>';
-    cits.forEach(function(c) {
+    var html = '<h4>📚 引用依据</h4><div class="comp-citations-list">';
+    cits.forEach(function(c, i) {
       var title = c.title || c.source || c.chapter || '课程知识片段';
       var page = c.page ? ' (p.' + esc(c.page) + ')' : '';
-      html += '<div class="comp-citation-item"><span class="cit-icon">📄</span><span>' + esc(title) + page + '</span></div>';
+      html += '<div class="comp-citation-item cit-clickable" data-testid="citation-card" data-cit-idx="' + i + '" onclick="_compHighlightCitation(' + i + ')">' +
+        '<span class="cit-num">[' + (i+1) + ']</span>' +
+        '<span>' + esc(title) + page + '</span></div>';
     });
+    html += '</div>';
     el.innerHTML = html;
   } else {
-    el.innerHTML = '<h4>📚 引用来源</h4><p style="font-size:11px;color:var(--gray-400)">暂无引用（使用通用知识生成）</p>';
+    el.innerHTML = '<h4>📚 引用来源</h4><p style="font-size:11px;color:var(--gray-400)">暂无课程引用，本回答为演示降级内容。</p>';
   }
 }
+
+window._compHighlightCitation = function(idx) {
+  // Remove all highlights
+  document.querySelectorAll('.cit-clickable').forEach(function(c) { c.classList.remove('cit-highlight'); });
+  // Highlight clicked
+  var target = document.querySelector('.cit-clickable[data-cit-idx="' + idx + '"]');
+  if (target) {
+    target.classList.add('cit-highlight');
+    target.scrollIntoView({behavior:'smooth',block:'nearest'});
+    // Auto-remove after 2s
+    setTimeout(function() { target.classList.remove('cit-highlight'); }, 2000);
+  }
+};
 
 function compAddChatMsg(role, content) {
   var msgs = document.getElementById('comp-chat-messages');
@@ -1456,69 +1484,110 @@ function compSwitchTab(tabName) {
 
 // ── Quiz rendering ──
 
-var compQuizState = { items: [], selected: {}, submitted: false, score: 0 };
+var compQuizState = { items: [], selected: {}, submitted: {}, score: 0 };
 
 function compRenderQuiz(items) {
-  compQuizState = { items: items || [], selected: {}, submitted: false, score: 0 };
+  compQuizState = { items: items || [], selected: {}, submitted: {}, score: 0 };
   var panel = document.getElementById('comp-panel-quiz');
   if (!panel || !items || items.length === 0) return;
   var html = '<div class="comp-quiz-wrapper">';
   items.forEach(function(q, qi) {
-    html += '<div class="comp-quiz-item"><div class="comp-quiz-q"><span class="comp-quiz-num">' + (qi+1) + '.</span> ' + esc(q.question || q.q || '') + '</div>';
+    var kp = q.knowledge_point || q.topic || '过拟合与正则化';
+    html += '<div class="comp-quiz-item" data-testid="quiz-card">' +
+      '<div class="comp-quiz-q"><span class="comp-quiz-num">' + (qi+1) + '.</span> ' + esc(q.question || q.q || '') + '</div>';
     var opts = q.options || q.opts || [];
     opts.forEach(function(o, oi) {
       var optText = typeof o === 'string' ? o : (o.text || o.label || '');
-      html += '<div class="comp-quiz-opt" data-qi="' + qi + '" data-oi="' + oi + '" onclick="_compSelectQuiz(' + qi + ',' + oi + ')">' +
+      html += '<div class="comp-quiz-opt" data-testid="quiz-option" data-qi="' + qi + '" data-oi="' + oi + '" onclick="_compSelectQuiz(' + qi + ',' + oi + ')">' +
         '<span class="comp-quiz-opt-marker" id="comp-quiz-marker-' + qi + '-' + oi + '">' + String.fromCharCode(65+oi) + '</span>' +
         '<span>' + esc(optText) + '</span></div>';
     });
+    // Feedback area (hidden until selection)
+    html += '<div class="comp-quiz-feedback" id="comp-quiz-fb-' + qi + '" style="display:none"></div>';
     html += '</div>';
   });
-  html += '<button class="btn btn-primary comp-quiz-submit" onclick="_compSubmitQuiz()">✅ 提交测验</button>';
+  html += '<div class="comp-quiz-footer">' +
+    '<div class="comp-quiz-progress" id="comp-quiz-progress">已答: 0/' + items.length + '</div>' +
+    '<button class="btn btn-primary comp-quiz-submit" onclick="_compSubmitQuiz()">✅ 提交测验</button>' +
+    '</div>';
   html += '<div class="comp-quiz-result" id="comp-quiz-result" style="display:none"></div>';
   html += '</div>';
   panel.innerHTML = html;
 }
 
 window._compSelectQuiz = function(qi, oi) {
-  if (compQuizState.submitted) return;
+  if (compQuizState.submitted[qi]) return;
+  var q = compQuizState.items[qi];
+  var ans = q.answer !== undefined ? q.answer : (q.correct !== undefined ? q.correct : 0);
+
+  // Clear previous selection in this question
   var items = document.querySelectorAll('.comp-quiz-opt[data-qi="' + qi + '"]');
   items.forEach(function(el) {
-    el.classList.remove('selected');
+    el.classList.remove('selected', 'correct', 'incorrect');
     var mk = document.getElementById('comp-quiz-marker-' + el.dataset.qi + '-' + el.dataset.oi);
-    if (mk) mk.className = 'comp-quiz-opt-marker';
+    if (mk) { mk.className = 'comp-quiz-opt-marker'; mk.textContent = String.fromCharCode(65 + parseInt(el.dataset.oi)); }
   });
+
+  // Mark selected
   var target = document.querySelector('.comp-quiz-opt[data-qi="' + qi + '"][data-oi="' + oi + '"]');
   if (target) target.classList.add('selected');
   var marker = document.getElementById('comp-quiz-marker-' + qi + '-' + oi);
   if (marker) marker.className = 'comp-quiz-opt-marker selected';
+
   compQuizState.selected[qi] = oi;
+  compQuizState.submitted[qi] = true;
+
+  // Disable options for this question
+  items.forEach(function(el) { el.style.pointerEvents = 'none'; });
+
+  // Show correct/incorrect
+  items.forEach(function(el) {
+    var elOi = parseInt(el.dataset.oi);
+    if (elOi === ans) {
+      el.classList.add('correct');
+      var mk = document.getElementById('comp-quiz-marker-' + qi + '-' + elOi);
+      if (mk) { mk.className = 'comp-quiz-opt-marker correct'; mk.textContent = '\u2713'; }
+    }
+  });
+  if (oi !== ans) {
+    target.classList.add('incorrect');
+    if (marker) { marker.className = 'comp-quiz-opt-marker incorrect'; marker.textContent = '\u2717'; }
+  }
+
+  // Show instant feedback
+  var fb = document.getElementById('comp-quiz-fb-' + qi);
+  if (fb) {
+    fb.style.display = 'block';
+    var isCorrect = (oi === ans);
+    var explain = q.explanation || q.explain || '';
+    var kp = q.knowledge_point || q.topic || '过拟合与正则化';
+    fb.innerHTML = '<div class="comp-quiz-fb-inner ' + (isCorrect ? 'fb-correct' : 'fb-incorrect') + '">' +
+      '<div class="fb-result">' + (isCorrect ? '✅ 回答正确' : '📖 还需要复习这个知识点') + '</div>' +
+      (explain ? '<div class="fb-explain"><strong>解析：</strong>' + esc(explain) + '</div>' : '') +
+      '<div class="fb-knowledge">📚 知识点：' + esc(kp) + '</div></div>';
+    fb.classList.add('fade-in');
+  }
+
+  // Update progress
+  var answered = Object.keys(compQuizState.submitted).length;
+  var total = compQuizState.items.length;
+  var progressEl = document.getElementById('comp-quiz-progress');
+  if (progressEl) progressEl.textContent = '已答: ' + answered + '/' + total;
 };
 
 window._compSubmitQuiz = function() {
-  if (compQuizState.submitted) return;
-  compQuizState.submitted = true;
-  // Disable options
-  document.querySelectorAll('.comp-quiz-opt').forEach(function(el) {
-    el.style.pointerEvents = 'none';
-  });
-  var submitBtn = document.querySelector('.comp-quiz-submit');
-  if (submitBtn) submitBtn.style.display = 'none';
-
-  var correct = 0, total = compQuizState.items.length;
+  var total = compQuizState.items.length;
+  var answered = Object.keys(compQuizState.submitted).length;
+  if (answered < total) {
+    toast('请先回答所有题目（已答 ' + answered + '/' + total + '）', 'info');
+    return;
+  }
+  var correct = 0;
   compQuizState.items.forEach(function(q, qi) {
     var sel = compQuizState.selected[qi];
     var ans = q.answer !== undefined ? q.answer : (q.correct !== undefined ? q.correct : 0);
     if (sel === ans) correct++;
-    // Highlight correct/incorrect
-    var opts = document.querySelectorAll('.comp-quiz-opt[data-qi="' + qi + '"]');
-    opts.forEach(function(el) {
-      var oi = parseInt(el.dataset.oi);
-      if (oi === ans) el.classList.add('correct');
-      else if (oi === sel && sel !== ans) el.classList.add('incorrect');
-    });
   });
-
   compQuizState.score = correct;
   var result = document.getElementById('comp-quiz-result');
   if (result) {
@@ -1527,7 +1596,10 @@ window._compSubmitQuiz = function() {
     var emoji = pct >= 80 ? '🎉' : (pct >= 60 ? '👍' : '📚');
     result.innerHTML = '<div class="comp-quiz-score">' + emoji + ' 得分: ' + correct + '/' + total + ' (' + pct + '%)</div>' +
       '<p style="font-size:12px;color:var(--gray-500);margin-top:4px">建议回顾知识结构图，加深理解</p>';
+    result.classList.add('fade-in');
   }
+  var submitBtn = document.querySelector('.comp-quiz-submit');
+  if (submitBtn) submitBtn.style.display = 'none';
 };
 
 // ── Main flow ──
@@ -1687,6 +1759,17 @@ async function compStep1_Ask() {
 }
 
 async function compStep2_Mindmap() {
+  var panel = document.getElementById('comp-panel-mindmap');
+  var wsEmpty = document.getElementById('comp-ws-empty');
+  if (wsEmpty) wsEmpty.style.display = 'none';
+
+  // 3-stage animation
+  var stages = ['正在梳理核心概念', '正在建立知识关系', '正在生成知识结构图'];
+  for (var si = 0; si < stages.length; si++) {
+    panel.innerHTML = '<div class="mindmap-stage fade-in"><div class="mindmap-stage-icon">🧠</div><div class="mindmap-stage-text">' + stages[si] + '</div><div class="mindmap-stage-dots"><span class="dot active"></span><span class="dot' + (si>=1?' active':'') + '"></span><span class="dot' + (si>=2?' active':'') + '"></span></div></div>';
+    await new Promise(function(r) { setTimeout(r, 600); });
+  }
+
   try {
     var controller = new AbortController();
     var timeoutId = setTimeout(function() { controller.abort(); }, 25000);
@@ -1699,51 +1782,76 @@ async function compStep2_Mindmap() {
     clearTimeout(timeoutId);
     var data = await res.json().catch(function(){ return {}; });
     var ok = res.ok;
-    var panel = document.getElementById('comp-panel-mindmap');
-    var wsEmpty = document.getElementById('comp-ws-empty');
-    if (wsEmpty) wsEmpty.style.display = 'none';
 
     if (ok && data) {
       compResults.mindmap = data;
       var mermaidCode = data.mermaid || data.content || '';
       if (mermaidCode && typeof mermaid !== 'undefined') {
-        panel.innerHTML = '<div class="comp-mermaid-wrapper"><div class="mermaid" id="comp-mermaid-render">' + esc(mermaidCode) + '</div></div>';
+        panel.innerHTML = '<div class="comp-mermaid-wrapper fade-in" data-testid="mindmap-panel"><div class="mermaid" id="comp-mermaid-render">' + esc(mermaidCode) + '</div></div>';
         try {
           await mermaid.run({querySelector: '#comp-mermaid-render'});
-        } catch(e) { panel.innerHTML = '<div class="comp-text-mindmap">' + esc(mermaidCode) + '</div>'; }
+        } catch(e) { panel.innerHTML = renderMindmapTextFallback(panel, mermaidCode); }
       } else {
-        panel.innerHTML = '<div class="comp-text-mindmap"><h4>🧠 ' + esc(data.title || '知识结构图') + '</h4><pre>' + esc(data.content || mermaidCode || '') + '</pre></div>';
+        renderMindmapTextFallback(panel, data.content || mermaidCode || '', data.title);
       }
     } else {
-      compResults.mindmap = null;
-      panel.innerHTML = '<div class="comp-error-card"><div class="comp-error-icon">🧠</div><div class="comp-error-msg">思维导图生成失败，已为你保留文字版知识结构。<br><br><strong>过拟合与正则化知识框架：</strong><br>1. 过拟合定义 → 训练误差低，测试误差高<br>2. 欠拟合定义 → 训练和测试误差都高<br>3. L1正则化 → Lasso，特征选择<br>4. L2正则化 → Ridge，权重衰减<br>5. Dropout → 随机丢弃神经元<br>6. 早停法 → 验证集误差上升时停止训练</div></div>';
+      renderMindmapStructuredFallback(panel);
     }
-    compSwitchTab('mindmap');
   } catch(e) {
     console.warn('Mindmap step error:', e.message);
-    var panel = document.getElementById('comp-panel-mindmap');
-    if (panel) {
-      panel.innerHTML = '<div class="comp-error-card"><div class="comp-error-icon">🧠</div><div class="comp-error-msg">思维导图生成失败，已为你保留文字版知识结构。<br><br><strong>过拟合与正则化知识框架：</strong><br>1. 过拟合定义<br>2. L1/L2正则化<br>3. Dropout<br>4. 早停法</div></div>';
-    }
-    compSwitchTab('mindmap');
+    renderMindmapStructuredFallback(panel);
   }
+  compSwitchTab('mindmap');
+}
+
+function renderMindmapTextFallback(panel, content, title) {
+  panel.innerHTML = '<div class="comp-text-mindmap fade-in" data-testid="mindmap-panel"><div class="mindmap-done-label">已为你生成轻量知识结构，适合快速复习。</div><h4>🧠 ' + esc(title || '知识结构图') + '</h4><pre>' + esc(content || '') + '</pre></div>';
+}
+
+function renderMindmapStructuredFallback(panel) {
+  var html = '<div class="comp-text-mindmap fade-in" data-testid="mindmap-panel">' +
+    '<div class="mindmap-done-label">已为你生成轻量知识结构，适合快速复习。</div>' +
+    '<h4>🧠 过拟合与正则化知识框架</h4>' +
+    '<div class="mindmap-tree">' +
+    '<div class="mindmap-node root"><span class="mm-dot"></span>过拟合与正则化</div>' +
+    '<div class="mindmap-branch"><div class="mindmap-node depth1"><span class="mm-dot"></span>过拟合</div>' +
+      '<div class="mindmap-leaf">训练误差低，测试误差高</div>' +
+      '<div class="mindmap-leaf">模型复杂度过高</div>' +
+      '<div class="mindmap-leaf">数据量不足</div></div>' +
+    '<div class="mindmap-branch"><div class="mindmap-node depth1"><span class="mm-dot"></span>欠拟合</div>' +
+      '<div class="mindmap-leaf">训练和测试误差都高</div>' +
+      '<div class="mindmap-leaf">模型过于简单</div></div>' +
+    '<div class="mindmap-branch"><div class="mindmap-node depth1"><span class="mm-dot"></span>正则化方法</div>' +
+      '<div class="mindmap-leaf">L1 (Lasso) · 特征选择</div>' +
+      '<div class="mindmap-leaf">L2 (Ridge) · 权重衰减</div>' +
+      '<div class="mindmap-leaf">Dropout · 随机丢弃神经元</div>' +
+      '<div class="mindmap-leaf">早停法 · 验证误差上升时停止</div></div>' +
+    '</div></div>';
+  panel.innerHTML = html;
 }
 
 async function compStep3_Quiz() {
   try {
-    var res = await api('/api/app/generate', {
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 25000);
+    var res = await fetch(S.apiBase + '/api/app/generate', {
       method: 'POST',
-      body: JSON.stringify({resource_type: 'quiz', topic: DEMO_TOPIC, course_id: S.courseId})
+      headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+S.token},
+      body: JSON.stringify({resource_type: 'quiz', topic: DEMO_TOPIC, course_id: S.courseId}),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+    var data = await res.json().catch(function(){ return {}; });
+    var ok = res.ok;
     var panel = document.getElementById('comp-panel-quiz');
-    if (res.ok && res.data) {
-      compResults.quiz = res.data;
+    if (ok && data) {
+      compResults.quiz = data;
       var items = null;
       // Try to parse items from content or items field
-      if (res.data.items && Array.isArray(res.data.items)) {
-        items = res.data.items;
-      } else if (res.data.content) {
-        try { var parsed = JSON.parse(res.data.content); items = parsed.items || parsed.questions || parsed; } catch(e) { /* raw text */ }
+      if (data.items && Array.isArray(data.items)) {
+        items = data.items;
+      } else if (data.content) {
+        try { var parsed = JSON.parse(data.content); items = parsed.items || parsed.questions || parsed; } catch(e) { /* raw text */ }
       }
       if (!items || items.length === 0) {
         // Fallback quiz
@@ -1781,17 +1889,24 @@ async function compStep3_Quiz() {
 
 async function compStep4_StudyPlan() {
   try {
-    var res = await api('/api/app/generate', {
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 25000);
+    var res = await fetch(S.apiBase + '/api/app/generate', {
       method: 'POST',
-      body: JSON.stringify({resource_type: 'study_plan', topic: DEMO_TOPIC, course_id: S.courseId})
+      headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+S.token},
+      body: JSON.stringify({resource_type: 'study_plan', topic: DEMO_TOPIC, course_id: S.courseId}),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+    var data = await res.json().catch(function(){ return {}; });
+    var ok = res.ok;
     var panel = document.getElementById('comp-panel-study_plan');
     var wsEmpty = document.getElementById('comp-ws-empty');
     if (wsEmpty) wsEmpty.style.display = 'none';
 
-    if (res.ok && res.data) {
-      compResults.studyPlan = res.data;
-      var plan = res.data.study_plan || res.data;
+    if (ok && data) {
+      compResults.studyPlan = data;
+      var plan = data.study_plan || data;
       var planObj = plan;
       if (typeof plan === 'string') {
         try { planObj = JSON.parse(plan); } catch(e) { planObj = {title: DEMO_TOPIC, phases:[]}; }
@@ -1809,31 +1924,55 @@ async function compStep4_StudyPlan() {
 }
 
 function renderStudyPlan(panel, plan) {
-  var html = '<div class="comp-plan-wrapper"><h4 style="color:var(--primary);margin-bottom:12px">🗺️ ' + esc(plan.title || DEMO_TOPIC) + '</h4>';
+  var html = '<div class="comp-plan-wrapper">' +
+    '<div class="comp-plan-intro fade-in">根据你的问题和当前薄弱点，系统建议按以下顺序学习。</div>' +
+    '<h4 style="color:var(--primary);margin:12px 0">🗺️ ' + esc(plan.title || DEMO_TOPIC) + '</h4>';
   var phases = plan.phases || plan.steps || plan.learning_path || [];
   if (phases.length === 0 && plan.profile_summary) {
     html += '<p style="font-size:13px;line-height:1.8;color:var(--gray-700)">' + esc(plan.profile_summary) + '</p>';
   }
+  var resources = ['课程知识库', 'AI 讲解', '练习题库', '补充阅读', '错题复盘'];
   phases.forEach(function(p, i) {
     var name = p.name || p.phase || p.step || ('阶段 ' + (i+1));
     var desc = p.description || p.detail || p.content || '';
-    var dur = p.duration || p.estimated_time || '';
-    html += '<div class="comp-plan-phase"><div class="comp-plan-phase-num">' + (i+1) + '</div>' +
-      '<div class="comp-plan-phase-body"><div class="comp-plan-phase-title">' + esc(name) +
-      (dur ? ' <span style="font-size:11px;color:var(--gray-400)">(' + esc(dur) + ')</span>' : '') +
-      '</div><div class="comp-plan-phase-desc">' + esc(desc) + '</div></div></div>';
+    var dur = p.duration || p.estimated_time || (20 + i*10) + '分钟';
+    var res = p.resources || (resources[i] || '知识库');
+    html += '<div class="comp-plan-phase plan-card-enhanced fade-in" data-testid="study-plan-card" style="animation-delay:' + (i*0.1) + 's">' +
+      '<div class="comp-plan-phase-num">' + (i+1) + '</div>' +
+      '<div class="comp-plan-phase-body">' +
+        '<div class="comp-plan-phase-title">' + esc(name) + '</div>' +
+        '<div class="comp-plan-phase-desc">' + esc(desc) + '</div>' +
+        '<div class="comp-plan-phase-meta">' +
+          '<span>⏱ ' + esc(dur) + '</span>' +
+          '<span>📚 ' + esc(res) + '</span>' +
+        '</div>' +
+      '</div></div>';
   });
   html += '</div>';
   panel.innerHTML = html;
 }
 
 function renderFallbackStudyPlan(panel) {
-  var html = '<div class="comp-plan-wrapper"><h4 style="color:var(--primary);margin-bottom:12px">🗺️ 基础复习路径</h4>' +
-    '<div class="comp-plan-phase"><div class="comp-plan-phase-num">1</div><div class="comp-plan-phase-body"><div class="comp-plan-phase-title">理解过拟合与欠拟合</div><div class="comp-plan-phase-desc">通过对比训练集和测试集误差，建立过拟合和欠拟合的直观理解</div></div></div>' +
-    '<div class="comp-plan-phase"><div class="comp-plan-phase-num">2</div><div class="comp-plan-phase-body"><div class="comp-plan-phase-title">学习L1与L2正则化</div><div class="comp-plan-phase-desc">掌握Lasso（L1）和Ridge（L2）的数学原理与使用场景</div></div></div>' +
-    '<div class="comp-plan-phase"><div class="comp-plan-phase-num">3</div><div class="comp-plan-phase-body"><div class="comp-plan-phase-title">掌握Dropout与早停法</div><div class="comp-plan-phase-desc">了解神经网络中常用的正则化技巧及其实现</div></div></div>' +
-    '<div class="comp-plan-phase"><div class="comp-plan-phase-num">4</div><div class="comp-plan-phase-body"><div class="comp-plan-phase-title">实践练习</div><div class="comp-plan-phase-desc">在真实数据集上对比不同正则化方法的效果</div></div></div>' +
-    '</div><div class="comp-error-card" style="margin-top:8px"><div class="comp-error-icon">🗺️</div><div class="comp-error-msg">学习路径生成失败，已使用基础复习路径。</div></div>';
+  var phases = [
+    {name:'理解过拟合',desc:'通过对比训练集和测试集误差，建立过拟合和欠拟合的直观理解',dur:'20分钟',res:'课程知识库'},
+    {name:'区分欠拟合',desc:'了解模型过于简单导致训练和测试误差都高的情况',dur:'15分钟',res:'AI 讲解'},
+    {name:'学习正则化',desc:'掌握L1(Lasso)和L2(Ridge)正则化的数学原理与使用场景',dur:'30分钟',res:'练习题库'},
+    {name:'完成练习',desc:'完成巩固练习，检验对过拟合和正则化的理解',dur:'20分钟',res:'练习题库'},
+    {name:'复盘错题',desc:'回顾错题和知识点，强化薄弱环节',dur:'15分钟',res:'错题复盘'}
+  ];
+  var html = '<div class="comp-plan-wrapper">' +
+    '<div class="comp-plan-intro fade-in">根据你的问题和当前薄弱点，系统建议按以下顺序学习。</div>' +
+    '<h4 style="color:var(--primary);margin:12px 0">🗺️ 基础复习路径</h4>';
+  phases.forEach(function(p, i) {
+    html += '<div class="comp-plan-phase plan-card-enhanced fade-in" data-testid="study-plan-card" style="animation-delay:' + (i*0.1) + 's">' +
+      '<div class="comp-plan-phase-num">' + (i+1) + '</div>' +
+      '<div class="comp-plan-phase-body">' +
+        '<div class="comp-plan-phase-title">' + esc(p.name) + '</div>' +
+        '<div class="comp-plan-phase-desc">' + esc(p.desc) + '</div>' +
+        '<div class="comp-plan-phase-meta"><span>⏱ ' + esc(p.dur) + '</span><span>📚 ' + esc(p.res) + '</span></div>' +
+      '</div></div>';
+  });
+  html += '<div class="comp-plan-note" style="margin-top:8px"><span>💡</span> 学习路径生成失败，已使用基础复习路径。</div></div>';
   panel.innerHTML = html;
 }
 

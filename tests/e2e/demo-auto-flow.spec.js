@@ -1,8 +1,8 @@
 /**
  * demo-auto-flow.spec.js
  *
- * E2E test for competition demo auto learning flow.
- * Verifies: landing → ask → citations → mindmap → quiz → study_plan → regenerate
+ * E2E test for competition demo auto learning flow (polished).
+ * Verifies: landing → ask → citations (highlight) → mindmap (stage) → quiz (feedback) → study_plan (cards) → regenerate
  */
 const { test, expect } = require('@playwright/test');
 const {
@@ -28,7 +28,7 @@ test.describe('competition demo auto learning flow', () => {
 
     // Assert landing hero
     await expect(page.locator('h1')).toContainText('智学工坊 AI 自动学习助手');
-    const startBtn = page.locator('button:has-text("开始 AI 学习演示")');
+    const startBtn = page.locator('[data-testid="demo-start"]');
     await expect(startBtn).toBeVisible();
 
     // ═══════════ Step 2: Click "开始 AI 学习演示" ═══════════
@@ -48,7 +48,6 @@ test.describe('competition demo auto learning flow', () => {
     await expect(chatMsgs).toContainText('正则化');
 
     // ═══════════ Step 4: Wait for entire flow to complete ═══════════
-    // The regenerate button becomes enabled when all 4 steps finish
     const regenBtn = page.locator('#comp-btn-regenerate');
     await expect(regenBtn).toBeEnabled({ timeout: 240000 });
 
@@ -56,71 +55,98 @@ test.describe('competition demo auto learning flow', () => {
     await page.waitForTimeout(2000);
     await assertNoBadText(page);
 
-    // ═══════════ Step 6: Citations ═══════════
-    const citationsEl = page.locator('#comp-citations');
-    const citText = await citationsEl.innerText();
-    expect(citText.length).toBeGreaterThan(5);
+    // ═══════════ Step 6: Citations — numbered cards with highlight ═══════════
+    const citationCards = page.locator('[data-testid="citation-card"]');
+    const citCount = await citationCards.count();
+    if (citCount >= 1) {
+      // Should have [N] numbering
+      const firstCitText = await citationCards.first().innerText();
+      // Contains citation number or title
+      expect(firstCitText.length).toBeGreaterThan(3);
 
-    // ═══════════ Step 7: Agent trace with Chinese names ═══════════
+      // Click first citation → should highlight
+      await citationCards.first().click();
+      await page.waitForTimeout(500);
+      const highlighted = page.locator('.cit-highlight');
+      const hlCount = await highlighted.count();
+      expect(hlCount).toBeGreaterThanOrEqual(1);
+    }
+    // If no citation cards, text should say "暂无课程引用"
+    if (citCount === 0) {
+      const citSection = page.locator('#comp-citations');
+      await expect(citSection).toContainText(/暂无|降级/);
+    }
+
+    // ═══════════ Step 7: Agent trace — Chinese names + data-testid ═══════════
+    const agentSteps = page.locator('[data-testid="agent-step"]');
+    const agentCount = await agentSteps.count();
+    expect(agentCount).toBeGreaterThanOrEqual(1);
+
     const traceEl = page.locator('#comp-agent-trace-content');
-    await expect(traceEl).toBeVisible();
     const traceText = await traceEl.innerText();
     expect(traceText).toMatch(/画像分析|课程资料检索|可信答案校验|学习资源生成/);
 
-    // ═══════════ Step 8: Mindmap tab — must have content ═══════════
+    // ═══════════ Step 8: Mindmap tab — stage animation or content ═══════════
     await page.locator('.comp-tab:has-text("思维导图")').click();
-    await page.waitForTimeout(1000);
-    const mindmapPanel = page.locator('#comp-panel-mindmap');
+    await page.waitForTimeout(2000);
+    const mindmapPanel = page.locator('[data-testid="mindmap-panel"]');
     const mmText = await mindmapPanel.innerText();
     expect(mmText.length).toBeGreaterThan(10);
+    // Should contain "知识" somewhere
+    expect(mmText).toMatch(/知识|结构|过拟合|正则化/);
 
-    // ═══════════ Step 9: Quiz tab ═══════════
+    // ═══════════ Step 9: Quiz tab — instant feedback ═══════════
     await page.locator('.comp-tab:has-text("练习题库")').click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
     const quizPanel = page.locator('#comp-panel-quiz');
-    const quizText = await quizPanel.innerText();
-    expect(quizText.length).toBeGreaterThan(20); // Must have meaningful content
+    let quizText = await quizPanel.innerText();
+    expect(quizText.length).toBeGreaterThan(20);
 
-    // At least some clickable quiz options
-    const quizOptions = quizPanel.locator('.comp-quiz-opt');
+    // Quiz options should have data-testid
+    const quizOptions = quizPanel.locator('[data-testid="quiz-option"]');
     const quizItemCount = await quizOptions.count();
     if (quizItemCount >= 3) {
-      // Click first option to test interactivity
+      // Click first option → expect feedback
       await quizOptions.first().click();
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(800);
+
+      // Should show selected state
       const selectedOpt = quizPanel.locator('.comp-quiz-opt.selected');
       const selectedCount = await selectedOpt.count();
       expect(selectedCount).toBeGreaterThanOrEqual(1);
-    }
-    // If quizOptions count is 0-2, that's acceptable (displayed content is there)
 
-    // ═══════════ Step 10: Study Plan tab ═══════════
+      // Should show feedback (correct/incorrect + explanation)
+      const feedbackEl = quizPanel.locator('.comp-quiz-feedback[style*="block"], .comp-quiz-feedback:not([style*="none"])');
+      const fbCount = await feedbackEl.count();
+      if (fbCount > 0) {
+        const fbText = await feedbackEl.first().innerText();
+        expect(fbText).toMatch(/回答正确|还需要复习|解析/);
+      }
+    }
+
+    // ═══════════ Step 10: Study Plan tab — cards ═══════════
     await page.locator('.comp-tab:has-text("学习路径")').click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
+    const planCards = page.locator('[data-testid="study-plan-card"]');
+    const planCount = await planCards.count();
+    expect(planCount).toBeGreaterThanOrEqual(3);
+
     const planPanel = page.locator('#comp-panel-study_plan');
     const planText = await planPanel.innerText();
     expect(planText.length).toBeGreaterThan(20);
-
-    // Check for phase items
-    const phases = planPanel.locator('.comp-plan-phase');
-    const phaseCount = await phases.count();
-    // At least some content
-    expect(phaseCount).toBeGreaterThanOrEqual(0);
+    // Should have the intro text
+    expect(planText).toMatch(/薄弱|顺序/);
 
     // ═══════════ Step 11: Regenerate ═══════════
-    // Clear previous errors/warnings before regenerate
     page._collectedErrors = [];
     page._collectedWarnings = [];
 
     await regenBtn.click();
 
-    // Wait for flow to restart — question should re-appear
+    // Wait for flow to restart
     await expect(page.locator('#comp-chat-messages')).toContainText('过拟合', { timeout: 15000 });
-
-    // Wait for step 1 progress
     await expect(page.locator('#comp-progress')).toContainText(/步骤 1/, { timeout: 15000 });
 
-    // Page still functional after regenerate
     await page.waitForTimeout(3000);
     await assertNoBadText(page);
 
@@ -140,7 +166,6 @@ test.describe('competition demo auto learning flow', () => {
       warnings.forEach(w => console.log(`  ${w}`));
     }
 
-    // Fail on real errors (not abort warnings from AbortController timeouts)
     const realErrors = errors.filter(e =>
       !e.includes('aborted') &&
       !e.includes('signal is aborted')

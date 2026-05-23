@@ -596,3 +596,56 @@ a{color:var(--primary);text-decoration:none}
 
 /* ── Competition: Regenerate Button ── */
 .comp-chat-input .btn{margin:0 auto}
+
+/* ── Competition: Citation Highlight ── */
+.comp-citations-list{max-height:300px;overflow-y:auto}
+.cit-clickable{cursor:pointer;transition:all 0.3s ease;border-radius:6px}
+.cit-clickable:hover{background:var(--primary-bg)}
+.cit-highlight{background:var(--primary-bg)!important;border-color:var(--primary)!important;box-shadow:0 0 0 2px var(--primary);transform:scale(1.02)}
+.cit-num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:20px;background:var(--gray-100);border-radius:4px;font-size:11px;font-weight:700;color:var(--gray-500);margin-right:6px;flex-shrink:0}
+.cit-highlight .cit-num{background:var(--primary);color:#fff}
+
+/* ── Animations ── */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.fade-in{animation:fadeIn .4s ease-out}
+.slide-up{animation:slideUp .5s ease-out}
+
+/* ── Mindmap Stages ── */
+.mindmap-stage{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;gap:12px}
+.mindmap-stage-icon{font-size:40px}
+.mindmap-stage-text{font-size:14px;color:var(--gray-500);font-weight:500}
+.mindmap-stage-dots{display:flex;gap:8px}
+.mindmap-stage-dots .dot{width:8px;height:8px;border-radius:50%;background:var(--gray-200);transition:all .3s}
+.mindmap-stage-dots .dot.active{background:var(--primary);transform:scale(1.3)}
+.mindmap-done-label{font-size:12px;color:var(--success);margin-bottom:8px;animation:pulse 1.5s infinite}
+.mindmap-tree{padding:8px 0}
+.mindmap-node{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:14px;font-weight:600;color:var(--gray-800)}
+.mindmap-node.root{font-size:16px;color:var(--primary);padding:8px 0;margin-bottom:4px}
+.mindmap-node.depth1{font-size:13px;color:var(--gray-700);padding-left:8px}
+.mindmap-branch{padding:4px 0;margin:4px 0;border-left:2px solid var(--gray-200)}
+.mindmap-leaf{font-size:12px;color:var(--gray-500);padding:2px 0 2px 28px;line-height:1.6}
+.mm-dot{width:6px;height:6px;border-radius:50%;background:var(--primary);flex-shrink:0}
+
+/* ── Quiz instant feedback ── */
+.comp-quiz-feedback{margin-top:8px}
+.comp-quiz-fb-inner{padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.6}
+.fb-correct{background:var(--success-bg);border:1px solid var(--success);color:var(--success)}
+.fb-incorrect{background:var(--warning-bg);border:1px solid var(--warning);color:var(--warning)}
+.fb-result{font-weight:700;font-size:13px;margin-bottom:4px}
+.fb-explain{margin-top:4px;color:var(--gray-700)}
+.fb-knowledge{font-size:11px;color:var(--gray-500);margin-top:4px}
+.comp-quiz-progress{font-size:12px;color:var(--gray-500)}
+.comp-quiz-footer{display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:12px}
+
+/* ── Study Plan Cards Enhanced ── */
+.plan-card-enhanced{border-left:3px solid var(--primary);transition:all var(--transition)}
+.plan-card-enhanced:hover{box-shadow:0 2px 8px rgba(79,70,229,.1)}
+.comp-plan-phase-meta{display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--gray-400)}
+.comp-plan-intro{font-size:12px;color:var(--gray-500);margin-bottom:8px;padding:8px 12px;background:var(--gray-50);border-radius:var(--radius)}
+.comp-plan-note{font-size:11px;color:var(--gray-500);padding:8px 12px;background:var(--warning-bg);border-radius:var(--radius);display:flex;align-items:center;gap:6px}
+
+/* ── Agent trace is-failed ── */
+.agent-trace-card.is-failed{opacity:.7;border-left:3px solid var(--warning)}
+.agent-status-tag.failed{background:var(--warning-bg);color:var(--warning)}
