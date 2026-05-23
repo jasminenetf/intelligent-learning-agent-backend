@@ -29,14 +29,21 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER: str = "hash_mock"
     EMBEDDING_DIM: int = 384
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Spark LLM (placeholder)
+    SPARK_APP_ID: str = ""
+    SPARK_API_SECRET: str = ""
 
-    # LLM Provider
-    LLM_PROVIDER: str = "deepseek"
-
+    # Spark Provider — production
+    SPARK_ENABLED: bool = False
     SPARK_BASE_URL: str = "https://spark-api-open.xf-yun.com/v1"
     SPARK_API_KEY: str = ""
     SPARK_API_PASSWORD: str = ""
     SPARK_MODEL: str = "generalv3.5"
+    SPARK_TIMEOUT_SECONDS: int = 30
+    SPARK_FALLBACK_PROVIDER: str = "deepseek"
+
+    # LLM Provider
+    LLM_PROVIDER: str = "deepseek"
 
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_API_KEY: str = ""

@@ -8,6 +8,11 @@ class SettingsStatusResponse(BaseModel):
     llm_model: str = ""
     is_mock: bool = True
     deepseek_configured: bool
+    spark_enabled: bool = False
+    spark_configured: bool = False
+    spark_model: str = ""
+    spark_base_url_configured: bool = False
+    fallback_provider: str = ""
     embedding_provider: str
     embedding_is_mock: bool = True
 
@@ -21,6 +26,7 @@ class LLMConfigRequest(BaseModel):
 
 class LLMTestRequest(BaseModel):
     message: str = "请用一句话说明你已连接成功"
+    provider: str = ""  # "deepseek" or "spark"
 
 
 class LLMTestResponse(BaseModel):
