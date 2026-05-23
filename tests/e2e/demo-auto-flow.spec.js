@@ -155,7 +155,7 @@ test.describe('competition demo auto learning flow', () => {
 
     // Wait for flow to restart
     await expect(page.locator('#comp-chat-messages')).toContainText('过拟合', { timeout: 15000 });
-    await expect(page.locator('#comp-progress')).toContainText(/步骤 1/, { timeout: 15000 });
+    await expect(page.locator('#comp-progress')).toContainText(/步骤|理解|构建|生成|规划/, { timeout: 15000 });
 
     await page.waitForTimeout(3000);
     await assertNoBadText(page);

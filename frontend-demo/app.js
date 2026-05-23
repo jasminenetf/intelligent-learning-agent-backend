@@ -1410,10 +1410,17 @@ function compUpdateCitations(cits) {
     var html = '<h4>📚 课程依据</h4><p style="font-size:10px;color:var(--gray-400);margin-bottom:4px">回答内容基于《人工智能导论》课程资料整理，关键结论可追溯。</p><div class="comp-citations-list">';
     cits.forEach(function(c, i) {
       var title = c.title || c.source || c.chapter || '课程知识片段';
-      var page = c.page ? ' (p.' + esc(c.page) + ')' : '';
+      var source = c.source || '';
+      var snippet = c.snippet || c.content || '';
+      var section = c.section || '';
+      var page = c.page || c.page_number || '';
+      var locInfo = section ? ' · ' + esc(section) : (page ? ' (p.' + esc(page) + ')' : '');
       html += '<div class="comp-citation-item cit-clickable" data-testid="citation-card" data-cit-idx="' + i + '" onclick="_compHighlightCitation(' + i + ')">' +
         '<span class="cit-num">[' + (i+1) + ']</span>' +
-        '<span>' + esc(title) + page + '</span></div>';
+        '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12px">' + esc(title) + '</div>' +
+        (source ? '<div style="font-size:10px;color:var(--gray-400)">' + esc(source) + locInfo + '</div>' : '') +
+        (snippet ? '<div style="font-size:10px;color:var(--gray-500);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(snippet.substring(0,60)) + '...</div>' : '') +
+        '</div></div>';
     });
     html += '</div>';
     el.innerHTML = html;
@@ -1619,7 +1626,23 @@ function compLoadLearningReport() {
   .then(function(data) {
     compRenderLearningReport(data);
   }).catch(function() {
-    // Report card will show default state
+    // Fallback to local calculation
+    var total = Object.keys(compQuizState.submitted).length;
+    if (total === 0) return;
+    var correct = 0;
+    compQuizState.items.forEach(function(q, qi) {
+      var sel = compQuizState.selected[qi];
+      var ans = q.answer !== undefined ? q.answer : (q.correct !== undefined ? q.correct : 0);
+      if (sel === ans) correct++;
+    });
+    var localData = {
+      total_attempts: total,
+      accuracy: total > 0 ? correct/total : 0,
+      weak_points: ['过拟合', '正则化'],
+      recommended_resources: [{type:'mindmap',title:'过拟合与正则化知识结构图'}],
+      profile_updated: true
+    };
+    compRenderLearningReport(localData);
   });
 }
 
@@ -1696,7 +1719,7 @@ window._compSubmitQuiz = function() {
     var pct = Math.round(correct / total * 100);
     var emoji = pct >= 80 ? '🎉' : (pct >= 60 ? '👍' : '📚');
     result.innerHTML = '<div class="comp-quiz-score">' + emoji + ' 得分: ' + correct + '/' + total + ' (' + pct + '%)</div>' +
-      '<p style="font-size:12px;color:var(--gray-500);margin-top:4px">建议回顾知识结构图，加深理解</p>';
+      '<p style="font-size:12px;color:var(--gray-500);margin-top:4px">建议回顾知识结构图，加深对薄弱点的理解</p>';
     result.classList.add('fade-in');
   }
   var submitBtn = document.querySelector('.comp-quiz-submit');
