@@ -67,6 +67,18 @@ async function assertNoBadText(page) {
     'Traceback',
     'KeyError',
     'TypeError',
+    'Tutor Agent',
+    'Agentic RAG',
+    'fallback',
+    '生成失败',
+    '请求失败',
+    'sample_ocr',
+    'demo_knowledge.txt',
+    'ocrsample',
+    '待开发',
+    'RAG 检索测试',
+    'Is Mock',
+    'Embedding Mock',
   ];
   for (const pattern of badPatterns) {
     if (body.includes(pattern)) {
