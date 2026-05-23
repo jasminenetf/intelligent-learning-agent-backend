@@ -86,6 +86,7 @@ function navTo(id){
   if(id==='learning-path')loadLearningPath();
   if(id==='settings')loadSettings();
   if(id==='dashboard')loadDashboard();
+  if(id==='competition')_navToCompetition();
 }
 
 function updateTopbar(){
@@ -119,33 +120,25 @@ async function initApp(){
     const isAuth = data.user && data.user.authenticated;
     if(!isAuth){setToken('');S.user=null;showWelcome();return;}
     if(!data.config.deepseek_configured){navTo('settings');toast('请先配置 AI 模型 Key','info');return;}
-    navTo('assistant');
+    navTo('competition');
     updateTopbar();
   }catch(e){console.warn('Bootstrap:',e.message);showWelcome();}
 }
 
 function showWelcome(){
   $$('.page').forEach(p=>p.classList.remove('active'));
-  let w=document.getElementById('page-welcome');
-  if(!w){
-    w=document.createElement('main');w.id='page-welcome';w.className='page-content page active';
-    w.innerHTML='<div style="max-width:600px;margin:60px auto;text-align:center">'+
-      '<div style="font-size:48px;margin-bottom:16px">🎓</div>'+
-      '<h2 style="font-size:22px;font-weight:700;margin-bottom:8px">智学 · 多智能体学习工作台</h2>'+
-      '<p style="font-size:14px;color:var(--gray-500);margin-bottom:24px;line-height:1.8">基于课程资料、学生画像和多智能体协同<br>为你生成 问答、讲义、思维导图、测验、PPT 与学习路径</p>'+
-      '<div style="display:flex;justify-content:center;gap:20px;margin-bottom:28px;font-size:12px;color:var(--gray-500)">'+
-        '<div style="text-align:center"><div style="font-size:20px;margin-bottom:4px">🔌</div>连接 AI 模型</div>'+
-        '<div style="text-align:center"><div style="font-size:20px;margin-bottom:4px">👤</div>进入演示账号</div>'+
-        '<div style="text-align:center"><div style="font-size:20px;margin-bottom:4px">📚</div>选择课程资料</div>'+
-        '<div style="text-align:center"><div style="font-size:20px;margin-bottom:4px">🚀</div>开始个性化学习</div>'+
-      '</div>'+
-      '<button class="btn btn-lg btn-primary" id="btn-welcome-demo" style="font-size:15px;padding:12px 32px" onclick="_loginDemo()">🎯 进入演示学习环境</button>'+
-      '<div style="margin-top:12px"><button class="btn btn-outline btn-sm" onclick="navTo(\'settings\')">⚙️ 配置 API Key</button></div>'+
-      '<p style="font-size:11px;color:var(--gray-400);margin-top:16px">演示账号自动准备课程、画像和知识库 · 无需注册</p>'+
-    '</div>';
-    document.querySelector('.main-area').appendChild(w);
+  var pg = document.getElementById('page-competition');
+  if (pg) {
+    pg.classList.add('active');
+    // Show landing, hide flow
+    var landing = document.getElementById('competition-landing');
+    var flow = document.getElementById('competition-flow');
+    if (landing) landing.style.display = '';
+    if (flow) flow.style.display = 'none';
   }
-  w.classList.add('active');
+  $$('.nav-item').forEach(n=>n.classList.remove('active'));
+  var compNav = document.getElementById('nav-competition');
+  if (compNav) compNav.classList.add('active');
   updateTopbar();
 }
 
@@ -163,7 +156,7 @@ async function initDemo(){
   }catch(e){console.warn('Demo init:',e.message);return false;}
 }
 
-window._loginDemo=async function(){if(await initDemo()){navTo('assistant');}};
+window._loginDemo=async function(){if(await initDemo()){navTo('competition');}};
 window._logout=function(){setToken('');S.user=null;S.profile=null;S.courses=[];S.kbReady=false;S.demoResults=null;updateTopbar();navTo('settings');toast('已退出','info');};
 
 // ════════════ PAGE: DASHBOARD ════════════
@@ -1339,6 +1332,154 @@ window._avatarStop = async function() {
   toast('已停止讲解', 'info');
 };
 
+// ── COMPETITION DEMO MODE ──────────────────────
+window._toggleAdvanced = function() {
+  var g = document.getElementById('nav-advanced-group');
+  var t = document.getElementById('nav-advanced-toggle');
+  if (!g || !t) return;
+  var isVisible = g.style.display !== 'none';
+  g.style.display = isVisible ? 'none' : 'block';
+  t.querySelector('span:last-child').textContent = isVisible ? '高级功能 ▾' : '高级功能 ▴';
+};
+
+window._startCompetition = async function() {
+  // Auto-login via demo if not authenticated
+  if (!S.token || !S.user) {
+    var ok = await initDemo();
+    if (!ok) {
+      toast('演示初始化失败，请确认后端已启动', 'error');
+      return;
+    }
+    updateTopbar();
+  }
+  var landing = document.getElementById('competition-landing');
+  var flow = document.getElementById('competition-flow');
+  if (landing) landing.style.display = 'none';
+  if (flow) flow.style.display = 'flex';
+  document.getElementById('comp-chat-input')?.focus();
+};
+
+window._compAsk = async function() {
+  var input = document.getElementById('comp-chat-input');
+  if (!input) return;
+  var question = input.value.trim();
+  if (!question) return;
+
+  var msgs = document.getElementById('comp-chat-messages');
+  if (!msgs) return;
+
+  // Show user message
+  var userDiv = document.createElement('div');
+  userDiv.className = 'comp-msg comp-msg-user';
+  userDiv.textContent = question;
+  // Remove empty state
+  var empty = msgs.querySelector('.comp-empty-state');
+  if (empty) empty.remove();
+  msgs.appendChild(userDiv);
+  msgs.scrollTop = msgs.scrollHeight;
+  input.value = '';
+  input.disabled = true;
+
+  // Show loading
+  var loadDiv = document.createElement('div');
+  loadDiv.className = 'comp-msg comp-msg-bot';
+  loadDiv.innerHTML = '<span class="comp-thinking">🤔 AI 正在分析问题...</span>';
+  loadDiv.id = 'comp-loading-msg';
+  msgs.appendChild(loadDiv);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  // Update agent trace
+  var traceContent = document.getElementById('comp-agent-trace-content');
+  if (traceContent) {
+    traceContent.innerHTML = '<div class="agent-trace-card is-running"><div class="agent-icon">🧠</div><div class="agent-info"><div class="agent-name">TutorAgent</div><div class="agent-detail">分析问题意图</div></div><span class="agent-status-tag running">执行中</span></div>';
+  }
+
+  try {
+    var res = await api('/api/app/ask', {
+      method: 'POST',
+      body: JSON.stringify({question: question, course_id: S.courseId})
+    });
+
+    var loadingEl = document.getElementById('comp-loading-msg');
+    if (loadingEl) loadingEl.remove();
+
+    if (res.ok && res.data) {
+      var answer = res.data.answer || res.data.response || '分析完成，请查看学习成果工作区。';
+      var botDiv = document.createElement('div');
+      botDiv.className = 'comp-msg comp-msg-bot';
+      botDiv.innerHTML = '<div class="comp-answer">' + esc(answer) + '</div>';
+      msgs.appendChild(botDiv);
+
+      // Update workspace with citations if available
+      if (res.data.answer) {
+        var ws = document.getElementById('comp-workspace');
+        if (ws) {
+          ws.innerHTML = '<div class="comp-result-card"><h4>📖 AI 解答</h4><div class="comp-result-body">' + esc(res.data.answer) + '</div></div>';
+        }
+      }
+
+      // Update citations
+      updateCompCitations(res.data);
+
+      // Update agent trace
+      if (traceContent) {
+        traceContent.innerHTML = '<div class="agent-trace-card is-completed"><div class="agent-icon">🧠</div><div class="agent-info"><div class="agent-name">TutorAgent</div><div class="agent-detail">讲解完成</div></div><span class="agent-status-tag completed">已完成</span></div>';
+      }
+
+      // Update profile
+      if (res.data.profile_delta) {
+        var pText = document.getElementById('comp-profile-text');
+        if (pText && res.data.profile_delta.knowledge_level) {
+          pText.textContent = '水平: ' + res.data.profile_delta.knowledge_level;
+        }
+      }
+    } else {
+      toast(res.data?.detail || '请求失败，请重试', 'error');
+    }
+  } catch(e) {
+    var loadingEl = document.getElementById('comp-loading-msg');
+    if (loadingEl) loadingEl.remove();
+    var errDiv = document.createElement('div');
+    errDiv.className = 'comp-msg comp-msg-bot';
+    errDiv.innerHTML = '<span style="color:var(--danger)">请求失败: ' + esc(friendlyError(e, 'AI问答')) + '</span>';
+    msgs.appendChild(errDiv);
+  }
+  msgs.scrollTop = msgs.scrollHeight;
+  input.disabled = false;
+};
+
+function updateCompCitations(data) {
+  var citEl = document.getElementById('comp-citations');
+  if (!citEl) return;
+  var citations = data?.citations || data?.sources || [];
+  if (citations.length > 0) {
+    var html = '<h4>📚 引用来源</h4>';
+    citations.forEach(function(c) {
+      html += '<div class="comp-citation-item"><span class="cit-icon">📄</span><span>' + esc(c.title || c.source || '课程资料') + '</span></div>';
+    });
+    citEl.innerHTML = html;
+  }
+}
+
+function _navToCompetition() {
+  $$('.page').forEach(p=>p.classList.remove('active'));
+  var pg = document.getElementById('page-competition');
+  if (pg) pg.classList.add('active');
+  // Always show landing when navigating back
+  var landing = document.getElementById('competition-landing');
+  var flow = document.getElementById('competition-flow');
+  if (landing) landing.style.display = '';
+  if (flow) flow.style.display = 'none';
+  $$('.nav-item').forEach(n=>n.classList.remove('active'));
+  var compNav = document.getElementById('nav-competition');
+  if (compNav) compNav.classList.add('active');
+  // Collapse advanced group
+  var g = document.getElementById('nav-advanced-group');
+  if (g) g.style.display = 'none';
+  var t = document.getElementById('nav-advanced-toggle');
+  if (t) t.querySelector('span:last-child').textContent = '高级功能 ▾';
+}
+
 // ── INIT ──────────────────────────────────────────
 window._navTo=navTo;window.initApp=initApp;
 window.addEventListener('error',function(e){if(!e.message&&!e.filename){e.preventDefault();return false;}});
@@ -1346,6 +1487,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   try{if(typeof mermaid!=='undefined')mermaid.initialize({startOnLoad:false,theme:'default',securityLevel:'loose',mindmap:{padding:20}});}catch(e){}
   $$('.nav-item').forEach(item=>on(item,'click',()=>navTo(item.dataset.page)));
   const ci=document.getElementById('chat-input');if(ci)on(ci,'keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();_sendQuestion();}});
-  try{initApp();}catch(e){console.warn('Init:',e.message);document.getElementById('page-assistant').innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><p>初始化失败</p><p style="font-size:11px;color:var(--gray-400)">请确认后端已启动</p></div>';}
+  const compCi=document.getElementById('comp-chat-input');if(compCi)on(compCi,'keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();_compAsk();}});
+  try{initApp();}catch(e){console.warn('Init:',e.message);}
 });
 })();
