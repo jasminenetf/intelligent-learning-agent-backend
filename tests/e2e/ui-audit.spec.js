@@ -20,7 +20,7 @@ test.describe('UI UX Audit', () => {
 
     // Key elements exist
     await expect(page.locator('[data-testid="demo-start"]')).toBeVisible();
-    await expect(page.locator('h1')).toContainText('智学工坊');
+    await expect(page.locator('#page-competition h1')).toContainText('智学工坊');
 
     // Screenshot
     await page.screenshot({ path: '../../../docs/screenshots/r3_ui_audit/01_home.png', fullPage: false });
