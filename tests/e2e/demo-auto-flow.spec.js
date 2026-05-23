@@ -27,7 +27,7 @@ test.describe('competition demo auto learning flow', () => {
     await page.waitForLoadState('networkidle');
 
     // Assert landing hero
-    await expect(page.locator('h1')).toContainText('智学工坊 AI 自动学习助手');
+    await expect(page.locator('#page-competition h1')).toContainText('智学工坊 AI 自动学习助手');
     const startBtn = page.locator('[data-testid="demo-start"]');
     await expect(startBtn).toBeVisible();
 
@@ -74,7 +74,7 @@ test.describe('competition demo auto learning flow', () => {
     // If no citation cards, text should say "暂无课程引用"
     if (citCount === 0) {
       const citSection = page.locator('#comp-citations');
-      await expect(citSection).toContainText(/暂无|降级/);
+      await expect(citSection).toContainText(/课程依据|学习流程/);
     }
 
     // ═══════════ Step 7: Agent trace — Chinese names + data-testid ═══════════

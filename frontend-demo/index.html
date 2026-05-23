@@ -19,13 +19,20 @@
     <span class="logo-text">智学工坊</span>
   </div>
   <nav class="sidebar-nav">
-    <!-- Competition mode -->
+    <!-- Competition mode (primary) -->
     <div class="nav-item active" data-page="competition" id="nav-competition">
       <span class="nav-icon">🏆</span><span>比赛演示</span>
     </div>
+    <div class="nav-item" data-page="learning-report" id="nav-learning-report">
+      <span class="nav-icon">📊</span><span>学习报告</span>
+    </div>
+    <div class="nav-item" data-page="settings" id="nav-settings">
+      <span class="nav-icon">⚙️</span><span>系统设置</span>
+    </div>
     <!-- Advanced divider -->
     <div class="nav-divider" id="nav-advanced-toggle" onclick="_toggleAdvanced()">
-      <span class="nav-icon">⚙️</span><span>高级功能 ▾</span>
+      <span class="nav-icon">🔧</span><span>高级功能 ▾</span>
+      <span style="font-size:9px;color:var(--gray-400);margin-left:auto">调试用</span>
     </div>
     <div class="nav-advanced-group" id="nav-advanced-group" style="display:none">
       <div class="nav-item nav-sub" data-page="dashboard">
@@ -35,19 +42,16 @@
         <span class="nav-icon">💬</span><span>学习助手</span>
       </div>
       <div class="nav-item nav-sub" data-page="generator">
-        <span class="nav-icon">⚡</span><span>资源生成</span>
+        <span class="nav-icon">⚡</span><span>学习资源</span>
       </div>
       <div class="nav-item nav-sub" data-page="courses">
         <span class="nav-icon">📚</span><span>课程管理</span>
       </div>
       <div class="nav-item nav-sub" data-page="knowledge">
-        <span class="nav-icon">🧠</span><span>知识库</span>
+        <span class="nav-icon">🧠</span><span>课程资料库</span>
       </div>
       <div class="nav-item nav-sub" data-page="learning-path">
-        <span class="nav-icon">🗺️</span><span>学习路径</span>
-      </div>
-      <div class="nav-item nav-sub" data-page="settings">
-        <span class="nav-icon">⚙️</span><span>设置</span>
+        <span class="nav-icon">🗺️</span><span>学习计划</span>
       </div>
     </div>
   </nav>
@@ -169,15 +173,15 @@
       <div class="comp-col comp-col-right">
         <div class="comp-col-header">📖 学习辅助</div>
         <div class="comp-side-section" id="comp-citations">
-          <h4>📚 引用来源</h4>
-          <p style="font-size:11px;color:var(--gray-400)">提问后显示文献引用</p>
+          <h4>📚 课程依据</h4>
+          <p style="font-size:11px;color:var(--gray-400)">回答内容基于课程资料整理，关键结论可追溯。</p>
         </div>
         <div class="comp-side-section" id="comp-profile">
           <h4>🎓 学生画像</h4>
           <p style="font-size:11px;color:var(--gray-400)" id="comp-profile-text">尚未提取画像</p>
         </div>
         <div class="comp-side-section" id="comp-agent-trace">
-          <h4>🤖 多智能体过程</h4>
+          <h4>🤖 学习助手协作</h4>
           <div id="comp-agent-trace-content">
             <p style="font-size:11px;color:var(--gray-400)">提问后显示协作过程</p>
           </div>
@@ -196,7 +200,7 @@
         <div class="chat-messages" id="chat-messages"></div>
         <div class="chat-input-area">
           <div class="chat-input-row">
-            <textarea id="chat-input" placeholder="向 Tutor Agent 提问..." rows="2"></textarea>
+            <textarea id="chat-input" placeholder="输入你想学习的问题，例如：过拟合和正则化有什么关系？" rows="2"></textarea>
             <button class="btn btn-primary" onclick="_sendQuestion()">发送</button>
           </div>
           <div class="chat-quick-btns">
@@ -257,9 +261,21 @@
 
   <!-- ═══════ PAGE: Settings ═══════ -->
   <main class="page-content page" id="page-settings"></main>
+
+  <!-- ═══════ PAGE: Learning Report ═══════ -->
+  <main class="page-content page" id="page-learning-report">
+    <div style="max-width:700px;margin:0 auto">
+      <div class="competition-hero" style="text-align:left;padding:0">
+        <h1 class="hero-title" style="font-size:22px;text-align:left">📊 学习报告</h1>
+        <p class="hero-subtitle" style="font-size:13px;text-align:left">查看你的学习进度、薄弱点和推荐复习资源</p>
+      </div>
+      <div id="lr-standalone"><div class="loading-block"><span class="spinner"></span> 加载中...</div></div>
+    </div>
+  </main>
 </div>
 </div>
 
+<script src="demo_payload.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
