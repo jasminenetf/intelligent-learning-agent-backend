@@ -57,15 +57,29 @@ cd intelligent-learning-agent-backend
 bash install.sh
 ```
 
-### 配置 API Key
+### 配置 API Key（推荐：前端设置页）
 
-安装完成后，编辑 `backend/.env`，填入 DeepSeek API Key：
+启动后端和前端后，打开浏览器进入 **系统设置** 页面，在 **DeepSeek 模型配置** 卡片中：
+
+1. 填写自己的 **DeepSeek API Key**
+2. 模型选择 **deepseek-v4-pro**（推荐）
+3. 点击 **保存配置** → **测试连接**
+4. 确认显示 "连接成功" 后即可使用
+
+> 详细步骤见 [朋友下载运行说明](docs/final/朋友下载运行说明.md)
+
+**备选：直接编辑 .env**
+
+也可复制 `backend/.env.example` 为 `backend/.env` 并填写：
 
 ```ini
 DEEPSEEK_API_KEY=sk-你的APIKey
+DEEPSEEK_MODEL=deepseek-v4-pro
 ```
 
-> 获取 API Key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)（新用户赠送 500 万 tokens）
+> 获取 API Key: [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)
+>
+> **注意**：`backend/.env` 不会提交到 GitHub（已加入 `.gitignore`）。GitHub 上不包含任何 API Key 是**正常的**，每个人需要自己配置。
 
 ---
 
@@ -160,10 +174,19 @@ bash scripts/start_app.sh
 A: 确认后端已启动。检查 `backend/.env` 是否存在，端口 8000 是否被占用。
 
 **Q: 问答/资源生成返回错误？**
-A: 确认已配置 DeepSeek API Key（设置页面可配置和测试连接）。
+A: 确认已配置 DeepSeek API Key（可在系统设置页面填写并测试连接）。
+
+**Q: deepseek-v4-pro 连接失败？**
+A: 可能是 API 权限不足。可在设置页切换为 `deepseek-v4-flash` 或旧兼容模型 `deepseek-chat`。详见 [模型与配置说明](docs/final/模型与配置说明.md)。
 
 **Q: 知识库为空？**
 A: 首次安装会自动导入演示知识库（高等数学上，约 16 个知识点）。如需添加更多课程，在"课程管理"上传资料。
+
+**Q: GitHub 上为什么没有 API Key？**
+A: 这是**正常的**。API Key 保存在本机 `backend/.env` 文件中，该文件已加入 `.gitignore`，不会被提交。每个人需要自己在设置页填写。
+
+**Q: 讯飞星火需要配置吗？**
+A: 不需要。星火是可选的备用模型，默认不启用。DeepSeek 已足够完成所有功能。
 
 **Q: Windows 下 WSL 报错？**
 A: 确保 WSL 已安装并设置默认发行版：`wsl --install`，然后 `wsl --set-default Ubuntu`。

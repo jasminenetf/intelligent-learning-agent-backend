@@ -1051,31 +1051,207 @@ function loadLearningPath(){
 
 // ════════════ PAGE: SETTINGS ════════════
 function loadSettings(){
-  const el=document.getElementById('page-settings');
-  el.innerHTML='<div class="card"><div class="card-header"><h3>⚙️ AI 模型服务配置</h3></div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:12px"><div><b>当前模型：</b>DeepSeek</div><div><b>星火模型：</b>可配置</div><div><b>备用机制：</b>已启用</div></div>'+
-    '<div><button class="btn btn-sm btn-outline" onclick="var el=document.getElementById(\'settings-advanced\');var arrow=document.getElementById(\'settings-arrow\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';arrow.textContent=el.style.display===\'none\'?\'▶\':\'▼\';"><span id="settings-arrow">▶</span> 高级配置</button></div>'+
-    '<div id="settings-advanced" style="display:none;margin-top:12px;border-top:1px solid var(--gray-100);padding-top:12px">'+
-    '<div class="form-group"><label>AI 模型服务</label><select id="settings-provider" onchange="_onProviderChange()"><option value="deepseek">DeepSeek</option><option value="spark">讯飞星火</option></select></div>'+
-    '<div class="form-group" id="spark-model-group" style="display:none"><label>星火模型版本</label><select id="settings-spark-model"><option value="generalv3.5">generalv3.5</option><option value="generalv3">generalv3</option><option value="lite">lite</option><option value="pro-128k">pro-128k</option><option value="max-32k">max-32k</option><option value="4.0Ultra">4.0Ultra</option></select></div>'+
-    '<div class="form-group"><label>API 密钥</label><input id="settings-key" type="password" placeholder="输入 API 密钥..."><div class="form-hint">密钥仅保存在本地后端，不会上传云端</div></div>'+
-    '<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="_saveSettings()">💾 保存</button><button class="btn btn-outline" onclick="_testConnection()">🔌 测试连接</button></div>'+
-    '<div id="settings-status" style="margin-top:8px;font-size:12px"></div>'+
-    '</div></div>'+
-    '<div class="card"><div class="card-header"><h3>📊 系统状态</h3></div><div id="settings-sys-status"><div class="loading-block"><span class="spinner"></span> 加载...</div></div></div>'+
-    '<div class="card"><div class="card-header"><h3>🔒 安全说明</h3></div><p style="font-size:12px;color:var(--gray-500)">🔐 密钥仅保存在本地后端 · 🚫 不会上传云端 · ✅ 已排除版本管理跟踪</p></div>';
-  api('/api/settings/status').then(({ok,data})=>{const s=$('#settings-sys-status');if(ok)s.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px"><div><b>当前模型:</b> '+esc(data.llm_provider||'—')+'</div><div><b>模型版本:</b> '+esc(data.llm_model||'—')+'</div><div><b>演示模式:</b> '+(data.is_mock?'是':'否')+'</div><div><b>DeepSeek:</b> '+(data.deepseek_configured?'✅已配置':'❌未配置')+'</div><div><b>讯飞星火:</b> '+(data.spark_configured?'✅已配置':'❌未配置')+'</div><div><b>星火版本:</b> '+esc(data.spark_model||'—')+'</div><div><b>备用服务:</b> '+esc(data.fallback_provider||'—')+'</div><div><b>语义索引:</b> '+(data.embedding_is_mock?'未启用':'已启用')+'</div></div>';}).catch(()=>{});}
+  var el=document.getElementById('page-settings');
+  el.innerHTML = _buildSettingsHTML();
+  // Load system status
+  api('/api/settings/status').then(function(r){
+    var s=document.getElementById('settings-sys-status');
+    if(!s)return;
+    if(r.ok){
+      var d=r.data;
+      s.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">'+
+        '<div><b>当前主模型：</b>'+esc(d.llm_provider||'—')+'</div>'+
+        '<div><b>当前模型名：</b>'+esc(d.llm_model||'—')+'</div>'+
+        '<div><b>DeepSeek 已配置：</b>'+(d.deepseek_configured?'✅ 是':'❌ 否')+'</div>'+
+        '<div><b>Spark 可选：</b>'+(d.spark_configured?'✅ 已配置':'⚪ 未配置')+'</div>'+
+        '<div><b>Fallback 开启：</b>'+(d.fallback_available?'✅ 是':'❌ 否')+'</div>'+
+        '<div><b>备用服务：</b>'+esc(d.fallback_provider||'—')+'</div>'+
+        '<div><b>星火版本：</b>'+esc(d.spark_model||'—')+'</div>'+
+        '<div><b>语义索引：</b>'+(d.embedding_is_mock?'未启用':'已启用')+'</div>'+
+        '</div>';
+      // Sync model dropdown to current value
+      var sel=document.getElementById('settings-ds-model');
+      if(sel && d.deepseek_model) sel.value = d.deepseek_model;
+    } else { s.innerHTML='<span style="color:var(--danger)">加载状态失败</span>'; }
+  }).catch(function(){});
+}
 
-window._onProviderChange=function(){
-  var prov=document.getElementById('settings-provider')?.value;
-  var sparkGroup=document.getElementById('spark-model-group');
-  if(sparkGroup)sparkGroup.style.display=prov==='spark'?'block':'none';
-  var baseInput=document.getElementById('settings-base');
-  if(baseInput)baseInput.value=prov==='spark'?'https://spark-api-open.xf-yun.com/v1':'https://api.deepseek.com/v1';
+function _buildSettingsHTML() {
+  var h = '';
+
+  // ── DeepSeek 模型配置 ──
+  h += '<div class="card">';
+  h += '<div class="card-header"><h3>🔧 DeepSeek 模型配置</h3></div>';
+
+  h += '<div class="form-group"><label>Base URL</label>';
+  h += '<input id="settings-ds-base" type="text" value="https://api.deepseek.com" placeholder="https://api.deepseek.com">';
+  h += '<div class="form-hint">DeepSeek API 地址，一般无需修改</div></div>';
+
+  h += '<div class="form-group"><label>API Key</label>';
+  h += '<input id="settings-ds-key" type="password" placeholder="sk-xxxxxxxx" autocomplete="off">';
+  h += '<div class="form-hint">API Key 仅保存到本机 backend/.env，不会上传到 GitHub</div></div>';
+
+  h += '<div class="form-group"><label>模型选择</label>';
+  h += '<select id="settings-ds-model">';
+  h += '<option value="deepseek-v4-pro">deepseek-v4-pro（推荐）</option>';
+  h += '<option value="deepseek-v4-flash">deepseek-v4-flash</option>';
+  h += '<option value="deepseek-chat">deepseek-chat（旧兼容，不推荐长期使用）</option>';
+  h += '<option value="deepseek-reasoner">deepseek-reasoner（旧兼容，不推荐长期使用）</option>';
+  h += '</select>';
+  h += '<div class="form-hint">deepseek-v4-pro 如无权限，可改用 deepseek-v4-flash 或旧兼容模型</div></div>';
+
+  h += '<div class="form-group"><label>超时时间（秒）</label>';
+  h += '<input id="settings-ds-timeout" type="number" value="60" min="10" max="300" step="5">';
+  h += '<div class="form-hint">默认 60 秒，网络不稳定可适当调大</div></div>';
+
+  h += '<div style="display:flex;gap:8px;margin-bottom:12px">';
+  h += '<button class="btn btn-primary" onclick="_saveDeepSeekSettings()">💾 保存配置</button>';
+  h += '<button class="btn btn-outline" onclick="_testDeepSeekConnection()">🔌 测试连接</button>';
+  h += '</div>';
+
+  h += '<div id="settings-ds-status" style="font-size:12px;min-height:20px"></div>';
+  h += '</div>';
+
+  // ── 系统状态 ──
+  h += '<div class="card">';
+  h += '<div class="card-header"><h3>📊 系统状态</h3></div>';
+  h += '<div id="settings-sys-status"><div class="loading-block"><span class="spinner"></span> 加载中...</div></div>';
+  h += '</div>';
+
+  // ── 朋友使用步骤 ──
+  h += '<div class="card">';
+  h += '<div class="card-header"><h3>📋 初次使用指南</h3></div>';
+  h += '<div style="font-size:13px;line-height:2">';
+  h += '<p>朋友下载后使用步骤：</p>';
+  h += '<ol style="padding-left:18px">';
+  h += '<li>打开本设置页（当前页面）</li>';
+  h += '<li>确认选择 <b>DeepSeek</b> 作为模型服务</li>';
+  h += '<li>填写自己的 <b>DeepSeek API Key</b></li>';
+  h += '<li>模型选择 <b>deepseek-v4-pro</b></li>';
+  h += '<li>点击 <b>保存配置</b></li>';
+  h += '<li>点击 <b>测试连接</b>，确认显示"连接成功"</li>';
+  h += '<li>返回首页点击<b>开始 AI 学习演示</b></li>';
+  h += '</ol>';
+  h += '</div></div>';
+
+  // ── 安全说明 ──
+  h += '<div class="card">';
+  h += '<div class="card-header"><h3>🔒 安全说明</h3></div>';
+  h += '<p style="font-size:12px;color:var(--gray-500)">';
+  h += '🔐 API Key 仅保存到本机 backend/.env 文件 · 🚫 不会上传到 GitHub · ✅ backend/.env 已加入 .gitignore · ';
+  h += '📋 页面不展示完整 Key · 🔇 日志不打印 Key';
+  h += '</p></div>';
+
+  // ── Spark 可选配置（折叠） ──
+  h += '<div class="card" style="border-color:var(--gray-200)">';
+  h += '<div class="card-header" style="cursor:pointer" onclick="var el=document.getElementById(\'spark-section\');var arrow=document.getElementById(\'spark-arrow\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';arrow.textContent=el.style.display===\'none\'?\'▶\':\'▼\';" id="spark-toggle">';
+  h += '<h3><span id="spark-arrow">▶</span> 讯飞星火（可选配置）</h3>';
+  h += '</div>';
+  h += '<div id="spark-section" style="display:none;margin-top:12px;border-top:1px solid var(--gray-100);padding-top:12px">';
+  h += '<div class="form-group"><label>Base URL</label>';
+  h += '<input id="settings-sp-base" type="text" value="https://spark-api-open.xf-yun.com/v1">';
+  h += '</div>';
+  h += '<div class="form-group"><label>API Password</label>';
+  h += '<input id="settings-sp-key" type="password" placeholder="输入星火 API Password..." autocomplete="off">';
+  h += '</div>';
+  h += '<div class="form-group"><label>模型版本</label>';
+  h += '<select id="settings-sp-model">';
+  h += '<option value="generalv3.5">generalv3.5</option>';
+  h += '<option value="generalv3">generalv3</option>';
+  h += '<option value="lite">lite</option>';
+  h += '<option value="pro-128k">pro-128k</option>';
+  h += '<option value="max-32k">max-32k</option>';
+  h += '<option value="4.0Ultra">4.0Ultra</option>';
+  h += '</select></div>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<button class="btn btn-sm btn-primary" onclick="_saveSparkSettings()">💾 保存</button>';
+  h += '<button class="btn btn-sm btn-outline" onclick="_testSparkConnection()">🔌 测试连接</button>';
+  h += '</div>';
+  h += '<div id="settings-sp-status" style="margin-top:8px;font-size:12px"></div>';
+  h += '</div></div>';
+
+  return h;
+}
+
+// ── DeepSeek 保存 ──
+window._saveDeepSeekSettings = async function() {
+  var key = (document.getElementById('settings-ds-key')||{}).value.trim();
+  if (!key) { toast('请填写 DeepSeek API Key','error'); return; }
+  var base = (document.getElementById('settings-ds-base')||{}).value.trim() || 'https://api.deepseek.com';
+  var model = (document.getElementById('settings-ds-model')||{}).value || 'deepseek-v4-pro';
+  var timeout = parseInt((document.getElementById('settings-ds-timeout')||{}).value) || 60;
+  var st = document.getElementById('settings-ds-status');
+  st.innerHTML = '<span class="spinner"></span> 保存中...';
+  try {
+    var body = { provider:'deepseek', api_key:key, base_url:base, model:model, timeout_seconds:timeout };
+    var r = await api('/api/settings/llm', { method:'POST', body:JSON.stringify(body) });
+    if (r.ok) {
+      st.innerHTML = '<span style="color:var(--success)">✅ 配置已保存</span>';
+      toast('DeepSeek 配置已保存，请点击"测试连接"确认可用性','success');
+      // Refresh system status
+      setTimeout(loadSettings, 800);
+    } else {
+      st.innerHTML = '<span style="color:var(--danger)">❌ 保存失败: '+esc(r.data.detail||'未知错误')+'</span>';
+    }
+  } catch(e) { st.innerHTML = '<span style="color:var(--danger)">❌ 网络错误</span>'; }
 };
 
-window._saveSettings=async function(){var provider=document.getElementById('settings-provider')?.value||'deepseek';var key=document.getElementById('settings-key')?.value.trim();if(!key){toast('请输入 API 密码','error');return;}var base=document.getElementById('settings-base')?.value.trim();var model=document.getElementById('settings-spark-model')?.value||document.getElementById('settings-model')?.value.trim()||'deepseek-chat';var se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 保存中...';try{var body={provider:provider,api_key:key,base_url:base||(provider==='spark'?'https://spark-api-open.xf-yun.com/v1':'https://api.deepseek.com/v1'),model:model};const{ok,data}=await api('/api/settings/llm',{method:'POST',body:JSON.stringify(body)});se.innerHTML=ok?'<span style="color:var(--success)">✅ 已保存</span>':'<span style="color:var(--danger)">❌ 失败: '+esc(data.detail||'')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
-window._testConnection=async function(){var provider=document.getElementById('settings-provider')?.value||'deepseek';const se=$('#settings-status');se.innerHTML='<span class="spinner"></span> 测试 '+esc(provider)+' 中...';try{const{ok,data}=await api('/api/settings/test-llm',{method:'POST',body:JSON.stringify({message:'你好，请回复连接成功',provider:provider})});se.innerHTML=(ok&&data.ok)?'<span style="color:var(--success)">✅ '+esc(provider)+' 连接成功! '+data.latency_ms+'ms</span>':'<span style="color:var(--danger)">❌ '+esc(data.error||'连接失败')+'</span>';}catch(e){se.innerHTML='<span style="color:var(--danger)">❌ 错误</span>';}};
+// ── DeepSeek 测试 ──
+window._testDeepSeekConnection = async function() {
+  var model = (document.getElementById('settings-ds-model')||{}).value || 'deepseek-v4-pro';
+  var st = document.getElementById('settings-ds-status');
+  st.innerHTML = '<span class="spinner"></span> 正在测试 '+esc(model)+' 连接...';
+  try {
+    var body = { message:'你好，请用一句话说明你已连接成功', provider:'deepseek', model:model };
+    var r = await api('/api/settings/test-llm', { method:'POST', body:JSON.stringify(body) });
+    if (r.ok && r.data.ok) {
+      st.innerHTML = '<span style="color:var(--success)">✅ '+esc(r.data.message||'连接成功')+' · '+r.data.latency_ms+'ms</span>';
+      toast('DeepSeek '+esc(model)+' 连接成功','success');
+    } else {
+      var errMsg = r.data.message || r.data.error || '连接失败';
+      st.innerHTML = '<span style="color:var(--danger)">❌ '+esc(errMsg)+'</span>';
+      toast(esc(errMsg),'error');
+    }
+  } catch(e) { st.innerHTML = '<span style="color:var(--danger)">❌ 网络错误，请检查后端是否运行</span>'; }
+};
+
+// ── Spark 保存 ──
+window._saveSparkSettings = async function() {
+  var key = (document.getElementById('settings-sp-key')||{}).value.trim();
+  if (!key) { toast('请填写星火 API Password','error'); return; }
+  var base = (document.getElementById('settings-sp-base')||{}).value.trim() || 'https://spark-api-open.xf-yun.com/v1';
+  var model = (document.getElementById('settings-sp-model')||{}).value || 'generalv3.5';
+  var st = document.getElementById('settings-sp-status');
+  st.innerHTML = '<span class="spinner"></span> 保存中...';
+  try {
+    var body = { provider:'spark', api_key:key, base_url:base, model:model };
+    var r = await api('/api/settings/llm', { method:'POST', body:JSON.stringify(body) });
+    if (r.ok) {
+      st.innerHTML = '<span style="color:var(--success)">✅ 已保存</span>';
+      toast('星火配置已保存','success');
+      setTimeout(loadSettings, 800);
+    } else {
+      st.innerHTML = '<span style="color:var(--danger)">❌ 失败: '+esc(r.data.detail||'')+'</span>';
+    }
+  } catch(e) { st.innerHTML = '<span style="color:var(--danger)">❌ 网络错误</span>'; }
+};
+
+// ── Spark 测试 ──
+window._testSparkConnection = async function() {
+  var model = (document.getElementById('settings-sp-model')||{}).value || 'generalv3.5';
+  var st = document.getElementById('settings-sp-status');
+  st.innerHTML = '<span class="spinner"></span> 测试星火中...';
+  try {
+    var body = { message:'你好', provider:'spark', model:model };
+    var r = await api('/api/settings/test-llm', { method:'POST', body:JSON.stringify(body) });
+    if (r.ok && r.data.ok) {
+      st.innerHTML = '<span style="color:var(--success)">✅ 连接成功 · '+r.data.latency_ms+'ms</span>';
+    } else {
+      st.innerHTML = '<span style="color:var(--danger)">❌ '+esc(r.data.error||'连接失败')+'</span>';
+    }
+  } catch(e) { st.innerHTML = '<span style="color:var(--danger)">❌ 网络错误</span>'; }
+};
 
 // ════════════ FULL DEMO ════════════
 window._runFullDemo=async function(){

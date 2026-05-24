@@ -8,11 +8,13 @@ class SettingsStatusResponse(BaseModel):
     llm_model: str = ""
     is_mock: bool = True
     deepseek_configured: bool
+    deepseek_model: str = ""
     spark_enabled: bool = False
     spark_configured: bool = False
     spark_model: str = ""
     spark_base_url_configured: bool = False
     fallback_provider: str = ""
+    fallback_available: bool = False
     embedding_provider: str
     embedding_is_mock: bool = True
 
@@ -21,12 +23,14 @@ class LLMConfigRequest(BaseModel):
     provider: str = "deepseek"
     api_key: str = Field(..., min_length=1)
     base_url: str = "https://api.deepseek.com"
-    model: str = "deepseek-chat"
+    model: str = "deepseek-v4-pro"
+    timeout_seconds: int = 60
 
 
 class LLMTestRequest(BaseModel):
-    message: str = "请用一句话说明你已连接成功"
+    message: str = "你好，请用一句话说明你已连接成功"
     provider: str = ""  # "deepseek" or "spark"
+    model: str = ""     # optional, overrides the configured model
 
 
 class LLMTestResponse(BaseModel):
@@ -36,3 +40,5 @@ class LLMTestResponse(BaseModel):
     response: str = ""
     latency_ms: float = 0
     error: str = ""
+    message: str = ""
+    fallback_available: bool = False
